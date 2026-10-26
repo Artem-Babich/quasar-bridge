@@ -40,6 +40,9 @@ func WithSpeaker(ctx context.Context, id string) context.Context {
 }
 func key(ctx context.Context) string { s, _ := ctx.Value(speakerKey{}).(string); return s }
 
+// SpeakerKey returns the anonymous key shared by this speaker's requests.
+func SpeakerKey(ctx context.Context) string { return key(ctx) }
+
 type turn struct {
 	user, answer string
 	private      bool

@@ -10,7 +10,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-	"uuid"
 
 	"github.com/coder/websocket"
 	request "github.com/freequasar/quasar-go-genproto/proto/alice/protos/api/alicekit/events/alice_request"
@@ -25,6 +24,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"quasarbridge/internal/dialogue"
+	"quasarbridge/internal/sound"
 	"quasarbridge/internal/wire"
 )
 
@@ -68,6 +68,9 @@ type nativeRequest struct {
 	audioStream                     uint32
 	audioWaiting                    bool
 	progressAudioDone               chan struct{}
+	soundRequest                    *sound.Request
+	soundDirective                  *soundDirective
+	soundSealed                     bool
 	expires                         *time.Timer
 }
 type Native struct {
@@ -149,7 +152,13 @@ func (n *Native) Client(ctx context.Context, k websocket.MessageType, data []byt
 			scope = "uuid:" + id
 		}
 		pctx, cancel := context.WithTimeout(dialogue.WithSpeaker(n.ctx, scope), 90*time.Second)
+		playerState := nativePlaybackState(req)
+		pctx = sound.WithPlaybackState(pctx, playerState)
+		slog.Info("native_player_state", "request", requestTag(id), "present", playerState.Present, "player_state", playerState.PlayerState, "offset_known", playerState.OffsetKnown, "offset_ms", playerState.OffsetMS, "has_stream", playerState.StreamID != "", "stream_tag", requestTag(playerState.StreamID))
 		p := &nativeRequest{id: id, request: proto.Clone(req).(*request.TAliceRequestProto), text: req.GetRequest().GetEvent().GetText(), ctx: pctx, cancel: cancel}
+		p.ctx = sound.WithPlayer(p.ctx, func(ctx context.Context, request sound.Request) error {
+			return n.queueSound(ctx, p, request)
+		})
 		p.header = proto.Clone(e.GetHeader()).(*header.TEventHeader)
 		p.isText = f.Kind() == "TextInput"
 		p.input = append([]byte{}, data...)
@@ -450,6 +459,7 @@ func (n *Native) Server(ctx context.Context, k websocket.MessageType, data []byt
 					return
 				}
 				if err != nil {
+					n.discardSound(p)
 					result.Answer = "Сейчас не получилось получить ответ локальной модели."
 				}
 				_ = n.sendCancel(p.ctx, p.id)
@@ -534,8 +544,11 @@ func (n *Native) maybeResolve(p *nativeRequest) {
 			return
 		}
 		if err != nil {
+			n.discardSound(p)
 			if result.Route == "home" {
 				result.Answer = "Не удалось подтвердить выполнение команды в умном доме."
+			} else if result.Route == "music" {
+				result.Answer = "Не удалось включить музыку с этой страницы."
 			} else {
 				result.Route = "llm"
 				result.Answer = "Сейчас не получилось получить ответ локальной модели."
@@ -604,6 +617,12 @@ func (n *Native) reply(p *nativeRequest, text string) error {
 		requestID = p.id
 	}
 	answer := &response.TAliceResponseProto{Header: &response.TAliceResponseProto_THeader{RequestId: new(requestID), ResponseId: new(newID()), DialogId: new(p.request.GetHeader().GetDialogId()), SequenceNumber: new(p.request.GetHeader().GetSequenceNumber())}, VoiceResponse: &response.TAliceResponseProto_TVoiceResponse{OutputSpeech: &response.TAliceResponseProto_TVoiceResponse_TOutputSpeech{Text: new(text)}, HasVoiceResponse: true}, Response: &response.TAliceResponseProto_TResponse{Cards: []*response.TAliceResponseProto_TResponse_TCard{{Type: "simple_text", Text: new(text), CardId: new(newID())}}}}
+	silentPlayback := n.hasSilentPlayback(p)
+	if silentPlayback {
+		answer.VoiceResponse.HasVoiceResponse = false
+		answer.VoiceResponse.OutputSpeech.Text = new("")
+	}
+	answer.Response.Directives = n.takeSound(p)
 	m := &server.TServerMessage{Message: &server.TServerMessage_Event{Event: &server.TServerMessage_TEvent{Header: &header.TEventHeader{MessageId: newID(), RefMessageId: p.id}, Event: &server.TServerMessage_TEvent_AliceResponse{AliceResponse: answer}}}}
 	b, err := (wire.Frame{Server: m, Prefix: []byte("AAPI")}).Marshal()
 	if err != nil {
@@ -616,6 +635,9 @@ func (n *Native) reply(p *nativeRequest, text string) error {
 	}
 	if err := n.down(p.ctx, websocket.MessageBinary, b); err != nil {
 		return err
+	}
+	if silentPlayback {
+		return nil
 	}
 	return n.synthesize(p, text)
 }
@@ -634,8 +656,7 @@ func requestTag(id string) string {
 
 // Quasar uses Yandex TGUID spelling (8-8-8-8), not RFC UUID spelling.
 func newID() string {
-	h := strings.ReplaceAll(uuid.NewV4().String(), "-", "")
-	return h[:8] + "-" + h[8:16] + "-" + h[16:24] + "-" + h[24:]
+	return sound.NewStreamID()
 }
 
 func (n *Native) makeContinue(p *nativeRequest) ([]byte, error) {

@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"quasarbridge/internal/llm"
+	"quasarbridge/internal/playback"
+	"quasarbridge/internal/webaddress"
 )
 
 type Completer interface {
@@ -19,10 +21,20 @@ type Completer interface {
 type HomeHandler interface {
 	Handle(context.Context, string) (string, error)
 }
+type PlaybackController interface {
+	Active(context.Context) bool
+	Control(context.Context, string) (string, error)
+}
+type MusicStarter interface {
+	CanStartMusic(string) bool
+	StartMusic(context.Context, string) (string, error)
+}
 type Engine struct {
 	LLM          Completer
 	Assistant    Completer
 	Home         HomeHandler
+	Playback     PlaybackController
+	Music        MusicStarter
 	Dialogue     *dialogue.Store
 	dialogueOnce sync.Once
 	routing      atomic.Pointer[RoutingPolicy]
@@ -75,6 +87,30 @@ func (e *Engine) ResolveDecision(ctx context.Context, text string, decision Rout
 	}
 	result := Resolution{Route: route}
 	switch route {
+	case "music":
+		if e.Music == nil {
+			return result, errors.New("music playback is unavailable")
+		}
+		answer, err := e.Music.StartMusic(ctx, text)
+		if !e.dialogue().Current(ctx, ticket) {
+			return result, context.Canceled
+		}
+		result.Answer = answer
+		return result, err
+	case "playback":
+		if e.Playback == nil {
+			return Resolution{Route: "yandex"}, nil
+		}
+		action := playback.Command(text)
+		if action == "" {
+			return result, errors.New("unknown playback control")
+		}
+		answer, err := e.Playback.Control(ctx, action)
+		if !e.dialogue().Current(ctx, ticket) {
+			return result, context.Canceled
+		}
+		result.Answer = answer
+		return result, err
 	case "home":
 		if e.Home == nil {
 			return Resolution{Route: "yandex"}, nil
@@ -89,6 +125,9 @@ func (e *Engine) ResolveDecision(ctx context.Context, text string, decision Rout
 	}
 }
 func (e *Engine) Fallback(ctx context.Context, text string) (Resolution, error) {
+	if strings.Contains(strings.ToLower(text), "сайт") || webaddress.MusicRequest(text) {
+		text = webaddress.Normalize(text)
+	}
 	r := Resolution{Route: "llm"}
 	if e.LLM == nil && e.Assistant == nil {
 		return r, errors.New("LLM is not configured")
@@ -174,7 +213,13 @@ func (e *Engine) Decide(ctx context.Context, text string) (decision RouteDecisio
 	if dialogue.IsReset(text) {
 		return RouteDecision{Route: "llm", Source: "dialogue_reset"}
 	}
+	if e.Playback != nil && playback.Command(text) != "" && e.Playback.Active(ctx) {
+		return RouteDecision{Route: "playback", Source: "playback"}
+	}
 	if d, ok := p.match(text); ok {
+		if d.Route == "llm" && e.Music != nil && e.Music.CanStartMusic(text) {
+			d.Route = "music"
+		}
 		return d
 	}
 	if len(snapshot.Messages) > 0 && dialogue.IsFollowup(text) {
