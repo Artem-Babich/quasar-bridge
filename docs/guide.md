@@ -109,19 +109,89 @@ chmod 600 config.json runtime.env
 В `config.json` задайте:
 
 - `mode`: `hybrid`;
-- `llm_base_url`: базовый URL API **с `/v1`, без `/chat/completions`**;
+- `llm_base_url`: базовый URL API **с `/v1`, без `/chat/completions` или `/responses`**;
 - `llm_model`: точный идентификатор доступной модели;
 - `home_warm_area`: при необходимости имя области HA, например `Кабинет`.
 
 Если API требует ключ, запишите его в `QUASAR_LLM_API_KEY` в `runtime.env`.
 Встроенная пара логин/пароль в URL не поддерживается.
 
-Клиент делает `POST /chat/completions` с `stream=false`, `temperature=0`,
+По умолчанию (`llm_api: "chat_completions"`) клиент делает
+`POST /chat/completions` с `stream=false`, `temperature=0`,
 `max_tokens=1024` и `chat_template_kwargs.enable_thinking=false`.
 Для классификации и планирования действий он также передаёт
 `response_format={"type":"json_object"}`. Сервер API должен принимать эти
-параметры и возвращать `choices[0].message.content`; одного текстового
-completion API недостаточно. Прямой запрос LLM ограничен 60 секундами.
+параметры и возвращать `choices[0].message.content`.
+
+Для [Responses API OpenAI](https://developers.openai.com/api/docs/guides/migrate-to-responses)
+выберите `llm_api: "responses"`. Это позволяет использовать reasoning-модели
+с локальными function tools, в том числе настроенными MCP-серверами:
+
+```json
+{
+  "llm_base_url": "https://api.openai.com/v1",
+  "llm_model": "your-reasoning-model",
+  "llm_api": "responses",
+  "llm_reasoning_effort": "low",
+  "llm_max_output_tokens": 4096,
+  "llm_hosted_tools": ["web_search", "code_interpreter"]
+}
+```
+
+Это фрагмент настроек для добавления в `config.json`. Ключ по-прежнему
+передаётся через `QUASAR_LLM_API_KEY`. Клиент отправляет `POST /responses`
+с `stream=false` и `store=false`, без `temperature`, `max_tokens` и
+`chat_template_kwargs`. Для классификации и планирования JSON-режим задаётся
+через `text.format`. Контекст и результаты локальных инструментов передаются
+в `input`; reasoning и другие элементы ответа сохраняются между вызовами
+инструментов в рамках одного запроса.
+
+`llm_reasoning_effort` необязателен: пустое значение оставляет выбор API.
+Допускаются `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`;
+конкретная модель может поддерживать только часть этих значений.
+`llm_max_output_tokens` — положительный лимит Responses, по умолчанию 4096,
+включающий reasoning-токены и текст ответа. При исчерпании лимита частичный
+ответ отклоняется; при необходимости увеличьте бюджет. Эти параметры
+не меняют `max_tokens=1024` режима Chat Completions.
+
+`llm_hosted_tools` по умолчанию пуст. Можно включить
+[веб-поиск](https://developers.openai.com/api/docs/guides/tools-web-search)
+(`web_search`) и
+[вычисления](https://developers.openai.com/api/docs/guides/tools-code-interpreter)
+(`code_interpreter`, контейнер `auto`); их исполняет OpenAI.
+Они работают и без `assistant_tools.enabled`. Для локальных инструментов
+web/history/time/MCP требуется `assistant_tools.enabled: true`.
+Hosted-инструменты отключены при классификации и структурированном
+планировании, после доступа к приватной истории и в финальном раунде агента
+при исчерпании его лимита инструментов. `llm_reasoning_effort` и непустой
+`llm_hosted_tools` требуют режима `responses`.
+Лимиты `assistant_tools.max_calls` и `max_rounds` учитывают локальные
+function tools. Внутренние вызовы hosted-инструментов выполняются на стороне
+провайдера в рамках одного HTTP-запроса и ограничены его правилами и общим
+таймаутом запроса.
+
+Оба режима ограничивают прямой запрос LLM 60 секундами. Изменение этих
+настроек требует перезапуска моста; `SIGHUP` не пересоздаёт клиент LLM.
+Один текстовый endpoint `/completions` не поддерживается.
+
+Для [Responses API OpenRouter](https://openrouter.ai/docs/api_reference/responses/overview)
+проверена следующая конфигурация:
+
+```json
+{
+  "llm_api": "responses",
+  "llm_base_url": "https://openrouter.ai/api/v1",
+  "llm_model": "openrouter/free",
+  "llm_max_output_tokens": 4096
+}
+```
+
+Ключ OpenRouter задаётся через `QUASAR_LLM_API_KEY`. Маршрутизатор
+`openrouter/free` выбирает доступную бесплатную модель для каждого запроса;
+конкретная модель может меняться и между вызовами инструментов.
+Проверены текст, JSON-режим, история диалога, `llm_reasoning_effort: "low"`
+и локальные function tools. Hosted-инструменты OpenRouter в этот прогон
+не входили. [Результаты проверки](validation.md#responses-api-и-openrouter).
 
 ### Home Assistant MCP
 
@@ -1375,6 +1445,10 @@ sudo systemctl disable --now quasar-bridge
 | `allowed_ips` | `QUASAR_ALLOWED_IPS` | JSON-массив или список IP через запятую; пустой отключает фильтр |
 | `llm_base_url` | `QUASAR_LLM_BASE_URL` | Базовый API URL с `/v1` |
 | `llm_model` | `QUASAR_LLM_MODEL` | Идентификатор модели |
+| `llm_api` | `QUASAR_LLM_API` | `chat_completions` по умолчанию, либо `responses`; пустое значение выбирает `chat_completions` |
+| `llm_reasoning_effort` | `QUASAR_LLM_REASONING_EFFORT` | Необязательный effort для Responses; допустимые значения зависят от модели |
+| `llm_max_output_tokens` | — | Положительный бюджет Responses с учётом reasoning, по умолчанию 4096 |
+| `llm_hosted_tools` | — | Список `web_search` и/или `code_interpreter` для Responses; по умолчанию пуст |
 | `home_warm_area` | `QUASAR_HOME_WARM_AREA` | Подготовка кеша света/выключателей области, не область по умолчанию |
 | `dialogue_context` | — | Короткая память локального диалога; по умолчанию включена, требуется перезапуск |
 | `local_progress` | — | Потоковое ожидание долгих локальных ответов; по умолчанию выключено, требуется перезапуск |

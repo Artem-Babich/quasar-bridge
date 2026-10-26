@@ -125,7 +125,11 @@ func (a *Agent) complete(ctx context.Context, messages []llm.Message, structured
 			tools = nil
 			messages[0].Content += "\nЛимит вызовов инструментов исчерпан. Дай окончательный ответ на основе полученных данных; если данных недостаточно, скажи об этом."
 		}
-		msg, err := a.Client.Chat(ctx, messages, tools)
+		callCtx := ctx
+		if *historyRead || round == a.MaxRounds || count >= a.MaxCalls {
+			callCtx = llm.WithoutHostedTools(callCtx)
+		}
+		msg, err := a.Client.Chat(callCtx, messages, tools)
 		if err != nil {
 			return "", err
 		}

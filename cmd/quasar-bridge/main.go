@@ -138,7 +138,11 @@ func main() {
 		}
 	}}
 	logs := new(journal.Writer)
-	lc := &llm.Client{BaseURL: cfg.LLMBaseURL, Model: cfg.LLMModel, APIKey: os.Getenv("QUASAR_LLM_API_KEY")}
+	lc := &llm.Client{
+		BaseURL: cfg.LLMBaseURL, Model: cfg.LLMModel, APIKey: os.Getenv("QUASAR_LLM_API_KEY"),
+		API: cfg.LLMAPI, ReasoningEffort: cfg.LLMReasoningEffort,
+		MaxOutputTokens: cfg.LLMMaxOutputTokens, HostedTools: cfg.LLMHostedTools,
+	}
 	engine := &bridge.Engine{LLM: lc, Dialogue: dialogue.New(cfg.DialogueContext)}
 	var musicQueue *assistant.MusicQueue
 	var hc *home.Controller
