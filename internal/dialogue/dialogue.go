@@ -48,10 +48,15 @@ type turn struct {
 	private      bool
 }
 type entry struct {
-	turns      []turn
-	at         time.Time
-	generation uint64
-	pending    bool
+	turns         []turn
+	replay        []turn
+	replayReady   bool
+	replayPartial string
+	replayInvalid bool
+	retryAnswered bool
+	at            time.Time
+	generation    uint64
+	pending       bool
 }
 type Snapshot struct {
 	Messages       []llm.Message
@@ -60,6 +65,7 @@ type Snapshot struct {
 type Ticket struct {
 	key        string
 	generation uint64
+	replay     *replayState
 }
 type requestKey struct{}
 type requestState struct {
@@ -97,6 +103,8 @@ func (s *Store) View(ctx context.Context) Snapshot {
 	e := s.entries[key(ctx)]
 	if e != nil && s.expired(e) {
 		e.turns = nil
+		e.replay = nil
+		e.replayReady = false
 		if !e.pending {
 			delete(s.entries, key(ctx))
 			e = nil
@@ -113,6 +121,8 @@ func (s *Store) Begin(ctx context.Context) (Snapshot, Ticket) {
 	for k, e := range s.entries {
 		if s.expired(e) {
 			e.turns = nil
+			e.replay = nil
+			e.replayReady = false
 			if !e.pending {
 				delete(s.entries, k)
 			}
@@ -136,12 +146,22 @@ func (s *Store) Begin(ctx context.Context) (Snapshot, Ticket) {
 	}
 	if s.expired(e) {
 		e.turns = nil
+		e.replay = nil
+		e.replayReady = false
 	}
+	var replay *replayState
+	if e.replayReady && len(e.replay) > 0 {
+		replay = &replayState{turns: slices.Clone(e.replay), at: e.at}
+	}
+	e.replayReady = false
+	e.replayPartial = ""
+	e.replayInvalid = false
+	e.retryAnswered = false
 	e.pending = true
 	s.generation++
 	e.generation = s.generation
 	e.at = s.now()
-	return snapshot(e), Ticket{key: k, generation: e.generation}
+	return snapshot(e), Ticket{key: k, generation: e.generation, replay: replay}
 }
 func (s *Store) Commit(ctx context.Context, ticket Ticket, user, answer string, private bool) bool {
 	if s == nil || !s.cfg.Enabled {

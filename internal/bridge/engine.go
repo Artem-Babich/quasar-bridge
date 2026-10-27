@@ -76,7 +76,11 @@ func (e *Engine) ResolveDecision(ctx context.Context, text string, decision Rout
 	if !e.dialogue().Current(ctx, ticket) {
 		return Resolution{Route: route}, context.Canceled
 	}
+	if decision.Source == "dialogue_retry" {
+		return e.retryQuestion(ctx, ticket)
+	}
 	if decision.Source == "dialogue_reset" {
+		e.dialogue().ClearReplay(ctx, ticket)
 		if !e.dialogue().Clear(ctx, ticket) {
 			return Resolution{Route: route}, context.Canceled
 		}
@@ -210,6 +214,9 @@ func (e *Engine) Decide(ctx context.Context, text string) (decision RouteDecisio
 		decision.prepared = true
 	}()
 	p := e.policy()
+	if isRetryCommand(text) {
+		return RouteDecision{Route: "llm", Source: "dialogue_retry"}
+	}
 	if dialogue.IsReset(text) {
 		return RouteDecision{Route: "llm", Source: "dialogue_reset"}
 	}

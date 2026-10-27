@@ -45,6 +45,7 @@ type FallbackResolver interface {
 
 type nativeRequest struct {
 	streaming                       bool
+	listenOnStreamStart             bool
 	partial                         uint32
 	responseID                      string
 	final                           bool
@@ -56,6 +57,7 @@ type nativeRequest struct {
 	id                              string
 	request                         *request.TAliceRequestProto
 	text                            string
+	route                           string
 	ctx                             context.Context
 	cancel                          context.CancelFunc
 	started, canceled, local, cloud bool
@@ -502,7 +504,11 @@ func (n *Native) Server(ctx context.Context, k websocket.MessageType, data []byt
 	}
 	n.mu.Unlock()
 	n.maybeResolve(p)
-	return n.down(ctx, k, data)
+	if err := n.down(ctx, k, data); err != nil {
+		return err
+	}
+	n.captureCloud(p, e)
+	return nil
 }
 func (n *Native) maybeResolve(p *nativeRequest) {
 	n.mu.Lock()
@@ -526,6 +532,9 @@ func (n *Native) maybeResolve(p *nativeRequest) {
 		if n.resolver != nil && strings.TrimSpace(text) != "" {
 			if routed, ok := n.resolver.(RoutedResolver); ok {
 				decision := routed.Decide(p.ctx, text)
+				n.mu.Lock()
+				p.listenOnStreamStart = decision.Source == "dialogue_retry"
+				n.mu.Unlock()
 				slog.Info("native_route_decision", "request", requestTag(p.id), "route", decision.Route, "source", decision.Source)
 				stop := func() {}
 				if decision.Route != "yandex" && n.ProgressAfter > 0 {
@@ -563,6 +572,7 @@ func (n *Native) maybeResolve(p *nativeRequest) {
 		if n.OnRoute != nil {
 			n.OnRoute(p.id, result.Route)
 		}
+		p.route = result.Route
 		if result.Route == "yandex" {
 			p.cloud = true
 			var err error
@@ -638,6 +648,7 @@ func (n *Native) reply(p *nativeRequest, text string) error {
 	if err := n.down(p.ctx, websocket.MessageBinary, b); err != nil {
 		return err
 	}
+	n.captureDelivered(p, text, true, silentPlayback || len(answer.Response.Directives) > 0, true)
 	if silentPlayback {
 		return nil
 	}
