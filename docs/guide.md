@@ -123,6 +123,39 @@ chmod 600 config.json runtime.env
 `response_format={"type":"json_object"}`. Сервер API должен принимать эти
 параметры и возвращать `choices[0].message.content`.
 
+Параметры запроса можно явно заменить через `llm_chat_parameters`.
+Значение `null` удаляет поле из запроса, остальные значения заменяют его
+целиком. Допускаются `temperature`, `max_tokens`, `max_completion_tokens`,
+`response_format`, `chat_template_kwargs` и `reasoning_effort`. Поле
+`response_format` применяется только к классификации и структурированному
+планированию; обычные ответы остаются текстовыми. Модель, сообщения,
+потоковый режим и настройки вызова инструментов задаёт мост. Непустой
+`llm_chat_parameters` требует `llm_api: "chat_completions"` и перезапуска.
+Формат и допустимые значения параметров зависят от выбранного API.
+
+Для [OpenAI-совместимого endpoint Anthropic](https://platform.claude.com/docs/en/cli-sdks-libraries/libraries/openai-sdk)
+отключите несовместимые параметры явно:
+
+```json
+{
+  "llm_api": "chat_completions",
+  "llm_base_url": "https://api.anthropic.com/v1",
+  "llm_model": "claude-haiku-5-5",
+  "llm_chat_parameters": {
+    "temperature": null,
+    "response_format": null,
+    "chat_template_kwargs": null
+  }
+}
+```
+
+Ключ Anthropic задаётся через `QUASAR_LLM_API_KEY`. Параметры запроса задаются
+явно и не зависят от имени хоста или модели.
+JSON для классификации и планирования запрашивается инструкцией в промпте,
+а результат проверяется мостом; серверная гарантия JSON-схемы здесь не
+используется. Некорректный JSON приводит к штатной обработке ошибки,
+а не к выполнению непроверенного плана.
+
 Для [Responses API OpenAI](https://developers.openai.com/api/docs/guides/migrate-to-responses)
 выберите `llm_api: "responses"`. Это позволяет использовать reasoning-модели
 с локальными function tools, в том числе настроенными MCP-серверами:
@@ -1303,9 +1336,11 @@ PID работающего Go-процесса.
 
 План проверяется целиком до исполнения: запрещены неизвестные/недоступные
 цели, произвольные сервисы и параметры, дубли и пересечение группы с её
-участниками. Максимум четыре действия на запрос. Более 80 кандидатов,
-контекст свыше 24 КБ или неполная выдача требуют уточнения/прерывают обработку;
-предел обнаружения — 2000 сущностей на домен.
+участниками. Максимум четыре действия на запрос. Более 80 разрешённых Assist
+кандидатов после отбора по комнате или контекст свыше 24 КБ требуют уточнения.
+Инвентарь читается постранично до конца выдачи в пределах времени запроса;
+ограничения в 2000 сущностей на домен нет. Неполная выдача, отсутствие прогресса
+пагинации и отмена запроса прерывают обработку до планирования действий.
 
 После сервиса читается `ha_get_state`. Для включения/выключения `light`,
 `switch`, `fan` проверяется итоговое состояние; для остальных команд
@@ -1446,6 +1481,7 @@ sudo systemctl disable --now quasar-bridge
 | `llm_base_url` | `QUASAR_LLM_BASE_URL` | Базовый API URL с `/v1` |
 | `llm_model` | `QUASAR_LLM_MODEL` | Идентификатор модели |
 | `llm_api` | `QUASAR_LLM_API` | `chat_completions` по умолчанию, либо `responses`; пустое значение выбирает `chat_completions` |
+| `llm_chat_parameters` | — | Явные параметры Chat Completions; `null` удаляет поле из запроса. По умолчанию пусто; требуется перезапуск |
 | `llm_reasoning_effort` | `QUASAR_LLM_REASONING_EFFORT` | Необязательный effort для Responses; допустимые значения зависят от модели |
 | `llm_max_output_tokens` | — | Положительный бюджет Responses с учётом reasoning, по умолчанию 4096 |
 | `llm_hosted_tools` | — | Список `web_search` и/или `code_interpreter` для Responses; по умолчанию пуст |

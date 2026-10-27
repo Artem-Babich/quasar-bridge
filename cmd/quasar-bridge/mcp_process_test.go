@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"flag"
 	"net/http"
@@ -29,11 +30,14 @@ func TestCustomMCPProcess(t *testing.T) {
 		return
 	}
 	for _, apiName := range []string{"chat_completions", "responses"} {
-		t.Run(apiName, func(t *testing.T) { testCustomMCPProcess(t, apiName) })
+		t.Run(apiName, func(t *testing.T) { testCustomMCPProcess(t, apiName, nil) })
 	}
+	t.Run("chat_parameters", func(t *testing.T) {
+		testCustomMCPProcess(t, "chat_completions", map[string]any{"temperature": nil, "response_format": nil, "chat_template_kwargs": nil})
+	})
 }
 
-func testCustomMCPProcess(t *testing.T, apiName string) {
+func testCustomMCPProcess(t *testing.T, apiName string, chatParameters map[string]any) {
 	t.Helper()
 	var toolCalls, llmCalls atomic.Int64
 	server := mcp.NewServer(&mcp.Implementation{Name: "fixture", Version: "1"}, nil)
@@ -88,11 +92,19 @@ func testCustomMCPProcess(t *testing.T, apiName string) {
 			return
 		}
 		var request struct {
-			Messages []llm.Message `json:"messages"`
-			Tools    []llm.Tool    `json:"tools"`
+			Messages           []llm.Message  `json:"messages"`
+			Tools              []llm.Tool     `json:"tools"`
+			Temperature        jsontext.Value `json:"temperature"`
+			ResponseFormat     jsontext.Value `json:"response_format"`
+			ChatTemplateKwargs jsontext.Value `json:"chat_template_kwargs"`
 		}
 		if err := json.UnmarshalRead(r.Body, &request); err != nil {
 			t.Error(err)
+			return
+		}
+		if chatParameters != nil && (len(request.Temperature) > 0 || len(request.ResponseFormat) > 0 || len(request.ChatTemplateKwargs) > 0) {
+			t.Error("configured chat parameter removal did not reach the API")
+			http.Error(w, "unsupported parameter", http.StatusBadRequest)
 			return
 		}
 		var message llm.Message
@@ -113,7 +125,7 @@ func testCustomMCPProcess(t *testing.T, apiName string) {
 		_, _ = w.Write(body)
 	}))
 	defer api.Close()
-	body, _ := json.Marshal(map[string]any{"mode": "hybrid", "llm_api": apiName, "llm_base_url": api.URL + "/v1", "llm_model": "fixture", "assistant_tools": map[string]any{"enabled": true, "web": false, "history": false, "time": false, "mcp_servers": []any{map[string]any{"name": "fixture", "url": mcpAPI.URL}}}})
+	body, _ := json.Marshal(map[string]any{"mode": "hybrid", "llm_api": apiName, "llm_chat_parameters": chatParameters, "llm_base_url": api.URL + "/v1", "llm_model": "fixture", "assistant_tools": map[string]any{"enabled": true, "web": false, "history": false, "time": false, "mcp_servers": []any{map[string]any{"name": "fixture", "url": mcpAPI.URL}}}})
 	path := configFile(t, string(body))
 	for _, action := range []string{"check-mcp", "query"} {
 		ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)

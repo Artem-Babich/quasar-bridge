@@ -14,6 +14,7 @@ import (
 	"quasarbridge/internal/bridge"
 	"quasarbridge/internal/dialogue"
 	"quasarbridge/internal/journal"
+	"quasarbridge/internal/llm"
 )
 
 type progressConfig struct {
@@ -39,6 +40,7 @@ type config struct {
 	LLMReasoningEffort string               `json:"llm_reasoning_effort"`
 	LLMMaxOutputTokens int                  `json:"llm_max_output_tokens"`
 	LLMHostedTools     []string             `json:"llm_hosted_tools"`
+	LLMChatParameters  map[string]any       `json:"llm_chat_parameters"`
 	HomeWarmArea       string               `json:"home_warm_area"`
 	Routing            bridge.RoutingConfig `json:"routing"`
 }
@@ -88,6 +90,16 @@ func readConfig(path string) (config, error) {
 	}
 	if cfg.LLMAPI != "chat_completions" && cfg.LLMAPI != "responses" {
 		return cfg, errors.New("llm_api must be chat_completions or responses")
+	}
+	if len(cfg.LLMChatParameters) == 0 {
+		cfg.LLMChatParameters = nil
+	} else {
+		if cfg.LLMAPI != "chat_completions" {
+			return cfg, errors.New("llm_chat_parameters requires llm_api chat_completions")
+		}
+		if err := llm.ValidateChatParameters(cfg.LLMChatParameters); err != nil {
+			return cfg, err
+		}
 	}
 	if cfg.LLMMaxOutputTokens <= 0 {
 		return cfg, errors.New("llm_max_output_tokens must be positive")

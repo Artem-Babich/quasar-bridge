@@ -48,7 +48,21 @@ type Client struct {
 	ReasoningEffort string
 	MaxOutputTokens int
 	HostedTools     []string
+	ChatParameters  map[string]any
 	HTTP            *http.Client
+}
+
+// ValidateChatParameters protects the request fields controlled by the bridge.
+// Parameter values are validated by the configured API.
+func ValidateChatParameters(parameters map[string]any) error {
+	for key := range parameters {
+		switch key {
+		case "temperature", "max_tokens", "max_completion_tokens", "response_format", "chat_template_kwargs", "reasoning_effort":
+		default:
+			return errors.New("unsupported LLM chat parameter")
+		}
+	}
+	return nil
 }
 
 func (c *Client) Complete(ctx context.Context, messages []Message, structured bool) (string, error) {
@@ -65,10 +79,16 @@ func (c *Client) Chat(ctx context.Context, messages []Message, tools []Tool) (Me
 	return c.chat(ctx, messages, false, tools)
 }
 func (c *Client) chat(ctx context.Context, messages []Message, structured bool, tools []Tool) (Message, error) {
+	if err := ValidateChatParameters(c.ChatParameters); err != nil {
+		return Message{}, err
+	}
 	switch c.API {
 	case "", "chat_completions":
 		return c.chatCompletions(ctx, messages, structured, tools)
 	case "responses":
+		if len(c.ChatParameters) > 0 {
+			return Message{}, errors.New("LLM chat parameters require chat_completions API")
+		}
 		return c.responses(ctx, messages, structured, tools)
 	default:
 		return Message{}, errors.New("unsupported LLM API")
@@ -76,14 +96,28 @@ func (c *Client) chat(ctx context.Context, messages []Message, structured bool, 
 }
 
 func (c *Client) chatCompletions(ctx context.Context, messages []Message, structured bool, tools []Tool) (Message, error) {
-	request := map[string]any{"model": c.Model, "messages": messages, "stream": false, "max_tokens": 1024, "temperature": 0, "chat_template_kwargs": map[string]any{"enable_thinking": false}}
+	request := map[string]any{
+		"model": c.Model, "messages": messages, "stream": false,
+		"temperature": 0, "max_tokens": 1024,
+		"chat_template_kwargs": map[string]any{"enable_thinking": false},
+	}
+	if structured {
+		request["response_format"] = map[string]string{"type": "json_object"}
+	}
+	for key, value := range c.ChatParameters {
+		if key == "response_format" && !structured {
+			continue
+		}
+		if value == nil {
+			delete(request, key)
+		} else {
+			request[key] = value
+		}
+	}
 	if len(tools) > 0 {
 		request["tools"] = tools
 		request["tool_choice"] = "auto"
 		request["parallel_tool_calls"] = false
-	}
-	if structured {
-		request["response_format"] = map[string]string{"type": "json_object"}
 	}
 	data, err := c.post(ctx, "/chat/completions", request)
 	if err != nil {

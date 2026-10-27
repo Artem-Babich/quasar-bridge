@@ -8,6 +8,7 @@
   "llm_base_url": "https://llm.example.invalid/v1",
   "llm_model": "your-model",
   "llm_api": "chat_completions",
+  "llm_chat_parameters": {},
   "llm_reasoning_effort": "",
   "llm_max_output_tokens": 4096,
   "llm_hosted_tools": [],
