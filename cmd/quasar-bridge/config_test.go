@@ -83,6 +83,27 @@ func configFile(t *testing.T, body string) string {
 	}
 	return p
 }
+
+func TestReadConfigAcceptsListenAfterReply(t *testing.T) {
+	for _, tc := range []struct {
+		body string
+		want bool
+	}{
+		{`{}`, true},
+		{`{"listen_after_reply":true}`, true},
+		{`{"listen_after_reply":false}`, false},
+	} {
+		t.Run(tc.body, func(t *testing.T) {
+			cfg, err := readConfig(configFile(t, tc.body))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if cfg.ListenAfterReply != tc.want {
+				t.Fatalf("listen_after_reply=%v, want %v", cfg.ListenAfterReply, tc.want)
+			}
+		})
+	}
+}
 func TestReadConfigEnvironmentOverridesDeploymentSettings(t *testing.T) {
 	t.Setenv("QUASAR_MODE", "hybrid")
 	t.Setenv("QUASAR_LISTEN", "localhost:9443")

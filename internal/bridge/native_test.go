@@ -42,6 +42,42 @@ func aa(m proto.Message) []byte {
 	return append([]byte("AAPI"), data...)
 }
 
+func TestNativeListenAfterReply(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		set  *bool
+		want bool
+	}{
+		{"default", nil, true},
+		{"enabled", new(true), true},
+		{"disabled", new(false), false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			n, _, down := soundSession(t, resolverFunc(func(context.Context, string) (Resolution, error) {
+				return Resolution{Route: "llm", Answer: "Готово."}, nil
+			}))
+			if tc.set != nil {
+				n.ShouldListen = *tc.set
+			}
+			input := wire.Decode(soundInput("follow-up"), wire.ClientToServer).Client
+			e := input.GetEvent()
+			e.Event = &client.TClientMessage_TEvent_VoiceInput{VoiceInput: e.GetTextInput()}
+			if err := n.Client(t.Context(), websocket.MessageBinary, aa(input)); err != nil {
+				t.Fatal(err)
+			}
+			for {
+				f := nextSoundFrame(t, down)
+				if r := f.Server.GetEvent().GetAliceResponse(); r != nil {
+					if got := r.GetVoiceResponse().GetShouldListen(); got != tc.want {
+						t.Fatalf("should_listen=%v, want %v", got, tc.want)
+					}
+					break
+				}
+			}
+		})
+	}
+}
+
 func TestNativeRoutesBeforeCloudExecutionAndCorrelatesTTS(t *testing.T) {
 	for _, route := range []string{"yandex", "llm", "no_continue", "home_disabled"} {
 		t.Run(route, func(t *testing.T) {
@@ -158,6 +194,9 @@ func TestNativeRoutesBeforeCloudExecutionAndCorrelatesTTS(t *testing.T) {
 				f := wire.Decode(data, wire.ServerToClient)
 				if f.Kind() == "AliceResponse" {
 					gotAnswer = true
+					if got := f.Server.GetEvent().GetAliceResponse().GetVoiceResponse().GetShouldListen(); got != (route == "llm") {
+						t.Fatalf("should_listen=%v for route %s", got, route)
+					}
 					text := f.Server.GetEvent().GetAliceResponse().GetVoiceResponse().GetOutputSpeech().GetText()
 					want := "Ответ своей модели"
 					if route != "llm" {

@@ -87,6 +87,7 @@ type Native struct {
 	wg               sync.WaitGroup
 	OnRoute          func(id, route string)
 	GateText         bool
+	ShouldListen     bool
 	DecisionDelay    time.Duration
 	ProgressAfter    time.Duration
 	ProgressInterval time.Duration
@@ -94,7 +95,7 @@ type Native struct {
 
 func NewNative(ctx context.Context, up, down Sender, resolver Resolver) *Native {
 	ctx, cancel := context.WithCancel(ctx)
-	return &Native{connectionScope: newID(), ctx: ctx, cancel: cancel, up: up, down: down, resolver: resolver, requests: map[string]*nativeRequest{}, tts: map[string]*nativeRequest{}, streams: map[uint32]*nativeRequest{}, blocked: map[uint32]*nativeRequest{}}
+	return &Native{connectionScope: newID(), ctx: ctx, cancel: cancel, up: up, down: down, resolver: resolver, ShouldListen: true, requests: map[string]*nativeRequest{}, tts: map[string]*nativeRequest{}, streams: map[uint32]*nativeRequest{}, blocked: map[uint32]*nativeRequest{}}
 }
 func (n *Native) Close() {
 	n.cancel()
@@ -618,6 +619,7 @@ func (n *Native) reply(p *nativeRequest, text string) error {
 	}
 	answer := &response.TAliceResponseProto{Header: &response.TAliceResponseProto_THeader{RequestId: new(requestID), ResponseId: new(newID()), DialogId: new(p.request.GetHeader().GetDialogId()), SequenceNumber: new(p.request.GetHeader().GetSequenceNumber())}, VoiceResponse: &response.TAliceResponseProto_TVoiceResponse{OutputSpeech: &response.TAliceResponseProto_TVoiceResponse_TOutputSpeech{Text: new(text)}, HasVoiceResponse: true}, Response: &response.TAliceResponseProto_TResponse{Cards: []*response.TAliceResponseProto_TResponse_TCard{{Type: "simple_text", Text: new(text), CardId: new(newID())}}}}
 	silentPlayback := n.hasSilentPlayback(p)
+	answer.VoiceResponse.ShouldListen = n.ShouldListen && !silentPlayback
 	if silentPlayback {
 		answer.VoiceResponse.HasVoiceResponse = false
 		answer.VoiceResponse.OutputSpeech.Text = new("")

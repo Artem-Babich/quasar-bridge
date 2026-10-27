@@ -69,6 +69,9 @@ func TestNativePlaybackControlsAreSilent(t *testing.T) {
 			for {
 				f := nextSoundFrame(t, down)
 				if r := f.Server.GetEvent().GetAliceResponse(); r != nil {
+					if r.GetVoiceResponse().GetShouldListen() {
+						t.Fatal("playback control reopened listening")
+					}
 					if r.GetVoiceResponse().GetHasVoiceResponse() {
 						t.Fatal("playercontrol synthesizedspeech")
 					}

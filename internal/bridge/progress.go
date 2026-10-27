@@ -113,7 +113,9 @@ func (n *Native) deferredPart(p *nativeRequest, text string, last bool) error {
 	base := &deferred.TDeferedAliceResponseProto_TBaseResponse{}
 	voice := text
 	if last {
-		if n.hasSilentPlayback(p) {
+		silentPlayback := n.hasSilentPlayback(p)
+		base.ShouldListen = n.ShouldListen && !silentPlayback
+		if silentPlayback {
 			voice = ""
 		}
 		base.Directives = n.takeSound(p)

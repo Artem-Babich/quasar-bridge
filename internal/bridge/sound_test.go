@@ -80,6 +80,9 @@ func TestNativeSoundFinalURLDirective(t *testing.T) {
 			for {
 				f := nextSoundFrame(t, down)
 				if r := f.Server.GetEvent().GetAliceResponse(); r != nil {
+					if r.GetVoiceResponse().GetShouldListen() {
+						t.Fatal("URL playback reopened listening")
+					}
 					if r.GetVoiceResponse().GetHasVoiceResponse() || r.GetVoiceResponse().GetOutputSpeech().GetText() != "" {
 						t.Fatal("URL playback must not be masked by spoken confirmation")
 					}
@@ -265,6 +268,9 @@ func TestNativeSoundOnlyOnFinalDeferredResponse(t *testing.T) {
 		if r := f.Server.GetEvent().GetDeferredAliceResponse(); r != nil && r.GetIsLast() {
 			if !sawClose {
 				t.Fatal("URL playback began before silent Dialog playback ended")
+			}
+			if r.GetBaseResponse().GetShouldListen() {
+				t.Fatal("deferred URL playback reopened listening")
 			}
 			ds := r.GetBaseResponse().GetDirectives()
 			if len(ds) != 1 || ds[0].GetName() != "audio_play" || r.GetBaseResponse().GetText() != "Готово." {

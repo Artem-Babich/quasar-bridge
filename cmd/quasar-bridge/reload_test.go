@@ -41,6 +41,28 @@ func TestReloadLLMSettingsRequiresRestart(t *testing.T) {
 	}
 }
 
+func TestReloadListenAfterReplyRequiresRestart(t *testing.T) {
+	path := configFile(t, `{}`)
+	initial, err := readConfig(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	engine := new(bridge.Engine)
+	if err := engine.SetRouting(initial.Routing); err != nil {
+		t.Fatal(err)
+	}
+	revision := engine.RoutingStatus().Revision
+	if err := os.WriteFile(path, []byte(`{"listen_after_reply":false}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := reloadRouting(path, initial, engine); err == nil || !strings.Contains(err.Error(), "restart required") {
+		t.Fatalf("changed listen_after_reply accepted: %v", err)
+	}
+	if engine.RoutingStatus().Revision != revision {
+		t.Fatal("rejected change altered routing")
+	}
+}
+
 func TestReloadRoutingKeepsLastGoodSnapshot(t *testing.T) {
 	path := configFile(t, `{"routing":{"rules":[],"default_route":"yandex"}}`)
 	initial, err := readConfig(path)
