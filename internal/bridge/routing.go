@@ -33,6 +33,9 @@ type ClassifierConfig struct {
 	Prompt    string `json:"prompt"`
 	TimeoutMS int    `json:"timeout_ms"`
 	OnError   string `json:"on_error"`
+
+	// Fork: time allowed for the Decisions classifier; 0 means 1500 ms.
+	DecisionsTimeoutMS int `json:"decisions_timeout_ms,omitzero"`
 }
 type RefusalConfig struct {
 	Enabled     bool     `json:"enabled"`
@@ -121,6 +124,9 @@ func CompileRouting(cfg RoutingConfig) (*RoutingPolicy, error) {
 	}
 	if cfg.Classifier.TimeoutMS < 1 || cfg.Classifier.TimeoutMS > 60000 {
 		return nil, errors.New("classifier timeout_ms must be between 1 and 60000")
+	}
+	if cfg.Classifier.DecisionsTimeoutMS < 0 || cfg.Classifier.DecisionsTimeoutMS > 60000 {
+		return nil, errors.New("classifier decisions_timeout_ms must be between 0 and 60000")
 	}
 	if strings.TrimSpace(cfg.Classifier.Prompt) == "" {
 		return nil, errors.New("classifier prompt must not be empty")
