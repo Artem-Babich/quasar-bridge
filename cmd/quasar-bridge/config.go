@@ -44,6 +44,11 @@ type config struct {
 	HomeWarmArea       string               `json:"home_warm_area"`
 	ListenAfterReply   bool                 `json:"listen_after_reply"`
 	Routing            bridge.RoutingConfig `json:"routing"`
+
+	// Fork: optional OpenAI Decisions route classifier.
+	ClassifierAPI     string `json:"classifier_api"`
+	ClassifierBaseURL string `json:"classifier_base_url"`
+	ClassifierModel   string `json:"classifier_model"`
 }
 
 func readConfig(path string) (config, error) {
@@ -171,6 +176,9 @@ func readConfig(path string) (config, error) {
 		return cfg, err
 	}
 	if _, err := bridge.CompileRouting(cfg.Routing); err != nil {
+		return cfg, err
+	}
+	if err := validateClassifier(&cfg); err != nil {
 		return cfg, err
 	}
 	return cfg, nil
