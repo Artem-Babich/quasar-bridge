@@ -11,14 +11,27 @@
 Включайте через `runtime.env`, а `config.json` не трогайте. Тогда прошлый релиз
 продолжит читать тот же конфиг, и откат сводится к замене бинарника.
 
+Перед установкой нового бинарника сохраните прошлый, он понадобится для отката:
+
 ```sh
-sudo cp /etc/quasar-bridge/runtime.env /etc/quasar-bridge/runtime.env.pre-decisions
-sudo tee -a /etc/quasar-bridge/runtime.env >/dev/null <<'EOF'
+sudo cp -p /opt/quasar-bridge/quasar-bridge /opt/quasar-bridge/quasar-bridge.prev
+```
+
+Сохраните копию `runtime.env` и откройте его редактором. Ключ не набирайте в
+командной строке, иначе он останется в истории оболочки.
+
+```sh
+sudo cp -p /etc/quasar-bridge/runtime.env /etc/quasar-bridge/runtime.env.pre-decisions
+sudoedit /etc/quasar-bridge/runtime.env
+```
+
+Добавьте строки:
+
+```sh
 QUASAR_CLASSIFIER_API=decisions
 QUASAR_CLASSIFIER_BASE_URL=https://api.openai.com/v1
 QUASAR_CLASSIFIER_MODEL=gpt-6-luna
 QUASAR_CLASSIFIER_API_KEY=sk-...
-EOF
 ```
 
 Ключ лучше взять из отдельного проекта OpenAI с лимитом расходов.
@@ -26,14 +39,27 @@ EOF
 
 ## Проверить
 
+Мост перезапускается, только если все три проверки прошли:
+
 ```sh
 sudo -u quasar-bridge sh -c 'set -a; . /etc/quasar-bridge/runtime.env; set +a; \
   /opt/quasar-bridge/quasar-bridge -config /etc/quasar-bridge/config.json -check-config && \
   /opt/quasar-bridge/quasar-bridge -config /etc/quasar-bridge/config.json -check-backends && \
-  /opt/quasar-bridge/quasar-bridge -config /etc/quasar-bridge/config.json -route "сочини стих про кота"'
-sudo systemctl restart quasar-bridge
-sudo journalctl -u quasar-bridge -n 20 -o cat | grep classifier_backend
+  /opt/quasar-bridge/quasar-bridge -config /etc/quasar-bridge/config.json -route "сочини стих про кота"' \
+  && sudo systemctl restart quasar-bridge \
+  && sudo journalctl -u quasar-bridge -n 20 -o cat | grep classifier_backend
 ```
+
+Если проверка не прошла, мост продолжает работать по-старому. Верните прежний
+`runtime.env`, чтобы ошибка не всплыла при следующем перезапуске или перезагрузке:
+
+```sh
+sudo cp -p /etc/quasar-bridge/runtime.env.pre-decisions /etc/quasar-bridge/runtime.env
+```
+
+Текст ошибки подсказывает причину: `Decisions http 401 invalid_api_key` означает
+неверный ключ, `http 404` неверный адрес или модель, а `http 429` лимит запросов
+или расходов.
 
 - В `-check-backends` должно быть
   `Classifier: decisions ok, route …, confidence …, cold N ms, warm M ms (timeout 1500 ms)`.
@@ -49,15 +75,18 @@ sudo journalctl -u quasar-bridge -n 20 -o cat | grep classifier_backend
 Decisions ещё `error_class`, `error_code` и `request_id`.
 
 ```sh
-J='journalctl -u quasar-bridge --since today -o cat'
+# journalctl выдаёт и служебные строки systemd, поэтому jq читает строки как текст
+decisions() { sudo journalctl -u quasar-bridge --since today -o cat | jq -cR 'fromjson? | select(.msg=="native_route_decision")'; }
 # медиана времени Decisions, мс
-$J | jq -r 'select(.msg=="native_route_decision" and .backend=="decisions") | .decisions_ms' | sort -n | awk '{a[NR]=$1} END{print a[int((NR+1)/2)]}'
+decisions | jq -r 'select(.backend=="decisions") | .decisions_ms' | sort -n | awk '{a[NR]=$1} END{print a[int((NR+1)/2)]}'
 # сколько раз Decisions не ответил, по причинам
-$J | jq -r 'select(.msg=="native_route_decision" and .error_class) | .error_class' | sort | uniq -c
+decisions | jq -r 'select(.error_class) | .error_class' | sort | uniq -c
 # доля решений Decisions среди всех решений классификатора
-$J | jq -s '[.[] | select(.msg=="native_route_decision" and .backend)] | {all: length, decisions: map(select(.backend=="decisions")) | length}'
+decisions | jq -s '[.[] | select(.backend)] | {all: length, decisions: map(select(.backend=="decisions")) | length}'
 # неуверенные решения (ниже 0.7) с тегом запроса
-$J | jq -c 'select(.msg=="native_route_decision" and .backend=="decisions" and .confidence < 0.7) | {request, route, confidence}'
+decisions | jq -c 'select(.backend=="decisions" and .confidence < 0.7) | {request, route, confidence}'
+# доля холодных соединений
+decisions | jq -s '[.[] | select(.conn_reused != null)] | {all: length, cold: map(select(.conn_reused==false)) | length}'
 ```
 
 Чтобы узнать фразу неуверенного решения, нужен журнал разговоров
@@ -82,12 +111,14 @@ sudo systemctl restart quasar-bridge
 ## Откатить бинарник
 
 Если `config.json` не менялся, достаточно вернуть прошлый бинарник. Старый мост
-переменные `QUASAR_CLASSIFIER_*` игнорирует.
+переменные `QUASAR_CLASSIFIER_*` игнорирует. `install` заменяет файл целиком,
+поэтому работает и пока мост запущен (обычный `cp` на запущенный файл завершится
+ошибкой «Text file busy»).
 
 ```sh
-sudo cp /opt/quasar-bridge/quasar-bridge.prev /opt/quasar-bridge/quasar-bridge
-sudo -u quasar-bridge /opt/quasar-bridge/quasar-bridge -config /etc/quasar-bridge/config.json -check-config
-sudo systemctl restart quasar-bridge
+sudo install -m 755 /opt/quasar-bridge/quasar-bridge.prev /opt/quasar-bridge/quasar-bridge \
+  && sudo -u quasar-bridge /opt/quasar-bridge/quasar-bridge -config /etc/quasar-bridge/config.json -check-config \
+  && sudo systemctl restart quasar-bridge
 ```
 
 ⚠️ Если поля `classifier_*` или `decisions_timeout_ms` всё же попали в
