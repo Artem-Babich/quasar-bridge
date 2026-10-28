@@ -8,7 +8,7 @@ func routeDecisionLogArgs(request string, d RouteDecision) []any {
 		return args
 	}
 	args = append(args, "backend", d.Backend, "latency_ms", d.LatencyMS)
-	if d.Confidence != 0 {
+	if d.Backend == "decisions" {
 		args = append(args, "confidence", d.Confidence)
 	}
 	if d.ErrorClass != "" {

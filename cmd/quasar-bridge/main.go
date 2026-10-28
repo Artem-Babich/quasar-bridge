@@ -213,7 +213,7 @@ func main() {
 				os.Exit(1)
 			}
 			if hc == nil {
-				fmt.Println("LLM: ok; Home Assistant: disabled" + classifierStatus)
+				fmt.Println(checkBackendsLine(false, 0, classifierStatus))
 				return
 			}
 			entities, err := hc.Entities(ctx)
@@ -221,7 +221,7 @@ func main() {
 				slog.Error("Home Assistant check failed", "error", err)
 				os.Exit(1)
 			}
-			fmt.Printf("LLM: ok; Home Assistant: %d entities%s\n", len(entities), classifierStatus)
+			fmt.Println(checkBackendsLine(true, len(entities), classifierStatus))
 			return
 		}
 		r, err := engine.Resolve(ctx, *query)

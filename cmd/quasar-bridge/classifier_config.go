@@ -46,3 +46,11 @@ func checkClassifier(ctx context.Context, c *llm.DecisionsClient, prompt string)
 	}
 	return fmt.Sprintf("; Classifier: decisions ok (%d ms)", time.Since(start).Milliseconds()), nil
 }
+
+// checkBackendsLine is the -check-backends summary line.
+func checkBackendsLine(homeEnabled bool, entities int, classifierStatus string) string {
+	if !homeEnabled {
+		return "LLM: ok; Home Assistant: disabled" + classifierStatus
+	}
+	return fmt.Sprintf("LLM: ok; Home Assistant: %d entities%s", entities, classifierStatus)
+}

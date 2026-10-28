@@ -6,6 +6,7 @@ import (
 	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"slices"
@@ -33,7 +34,12 @@ type DecisionsError struct {
 	Status int
 }
 
-func (e *DecisionsError) Error() string { return "Decisions " + e.Class }
+func (e *DecisionsError) Error() string {
+	if e.Class == "http" {
+		return fmt.Sprintf("Decisions http %d", e.Status)
+	}
+	return "Decisions " + e.Class
+}
 
 const maxDecisionsResponseBytes = 64 << 10
 
