@@ -63,11 +63,17 @@ sudo cp -p /etc/quasar-bridge/runtime.env.pre-decisions /etc/quasar-bridge/runti
 
 - В `-check-backends` должно быть
   `Classifier: decisions ok, route …, confidence …, cold N ms new connection, warm M ms reused connection (timeout 1500 ms)`.
-  `timeout` — реальный лимит: меньшее из `decisions_timeout_ms` и `timeout_ms`.
+  `timeout` — лимит Decisions: `decisions_timeout_ms` (0 = 1500 мс).
+  Если у `cold` стоит `reused connection`, адрес LLM и Decisions на одном хосте,
+  и холодный замер на самом деле тёплый.
 - Если там `WARNING: cold call exceeds decisions_timeout_ms`, то после простоя
   Decisions будет часто не успевать, и маршрут будет выбирать LLM. Увеличьте
   `routing.classifier.decisions_timeout_ms` (применяется по `systemctl reload`);
   значение должно быть меньше `timeout_ms`, иначе конфиг не примется.
+  Применилось ли — видно в журнале:
+  `sudo journalctl -u quasar-bridge -n 20 -o cat | grep -E 'routing_reload|classifier_backend'`.
+  Нужны `routing_reloaded` и `classifier_backend` с новым `decisions_timeout_ms`;
+  `routing_reload_rejected` значит, что конфиг не принят и работает прежний.
   ⚠️ Это поле в `config.json`: перед откатом на старый бинарник его нужно убрать
   (см. «Откатить бинарник»).
 - В выводе `-route` должно быть `"backend":"decisions"`.
