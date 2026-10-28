@@ -47,6 +47,9 @@ type DecisionsError struct {
 }
 
 func (e *DecisionsError) Error() string {
+	if e.Class == "http" && e.Code != "" {
+		return fmt.Sprintf("Decisions http %d %s", e.Status, e.Code)
+	}
 	if e.Class == "http" {
 		return fmt.Sprintf("Decisions http %d", e.Status)
 	}
@@ -114,7 +117,7 @@ func (c *DecisionsClient) ChooseRoute(ctx context.Context, instructions string, 
 		return fail(contextOr(ctx, "transport"))
 	}
 	defer resp.Body.Close()
-	call.RequestID = resp.Header.Get("X-Request-Id")
+	call.RequestID = cut(resp.Header.Get("X-Request-Id"))
 	data, err := io.ReadAll(io.LimitReader(resp.Body, maxDecisionsResponseBytes+1))
 	if resp.StatusCode != http.StatusOK {
 		// Keep only the machine-readable code; the message can echo input.
@@ -124,7 +127,7 @@ func (c *DecisionsClient) ChooseRoute(ctx context.Context, instructions string, 
 			} `json:"error"`
 		}
 		_ = json.Unmarshal(data, &apiError)
-		return fail(&DecisionsError{Class: "http", Status: resp.StatusCode, Code: apiError.Error.Code})
+		return fail(&DecisionsError{Class: "http", Status: resp.StatusCode, Code: cut(apiError.Error.Code)})
 	}
 	if err != nil {
 		return fail(contextOr(ctx, "transport"))
@@ -162,4 +165,13 @@ func contextOr(ctx context.Context, class string) *DecisionsError {
 		return &DecisionsError{Class: "canceled"}
 	}
 	return &DecisionsError{Class: class}
+}
+
+// cut bounds network-supplied identifiers before they reach every log line.
+func cut(s string) string {
+	const max = 64
+	if len(s) <= max {
+		return s
+	}
+	return strings.ToValidUTF8(s[:max], "")
 }

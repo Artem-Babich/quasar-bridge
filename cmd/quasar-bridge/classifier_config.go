@@ -22,10 +22,10 @@ func validateClassifier(cfg *config) error {
 	case "llm":
 	case "decisions":
 		if !validEndpoint(cfg.ClassifierBaseURL, "http", "https") {
-			return errors.New("classifier_api decisions requires a valid classifier_base_url")
+			return errors.New("classifier_api decisions requires a valid classifier_base_url (or QUASAR_CLASSIFIER_BASE_URL)")
 		}
 		if cfg.ClassifierModel == "" {
-			return errors.New("classifier_api decisions requires classifier_model")
+			return errors.New("classifier_api decisions requires classifier_model (or QUASAR_CLASSIFIER_MODEL)")
 		}
 		if os.Getenv("QUASAR_CLASSIFIER_API_KEY") == "" {
 			return errors.New("classifier_api decisions requires QUASAR_CLASSIFIER_API_KEY")
@@ -39,7 +39,7 @@ func validateClassifier(cfg *config) error {
 			return fmt.Errorf("classifier decisions_timeout_ms (%d ms, 0 means 1500) must be shorter than timeout_ms (%d ms)", decisionsMS, c.TimeoutMS)
 		}
 	default:
-		return errors.New("classifier_api must be llm or decisions")
+		return errors.New("classifier_api (or QUASAR_CLASSIFIER_API) must be llm or decisions")
 	}
 	return nil
 }
