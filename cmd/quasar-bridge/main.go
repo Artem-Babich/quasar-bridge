@@ -334,6 +334,7 @@ func main() {
 		_ = server.Shutdown(shutdownCtx)
 	}()
 	slog.Info("listening", "address", cfg.Listen, "mode", cfg.Mode, "routing_revision", engine.RoutingStatus().Revision)
+	logClassifierBackend(cfg)
 	if cfg.TLSCert != "" && cfg.TLSKey != "" {
 		err = server.ListenAndServeTLS(cfg.TLSCert, cfg.TLSKey)
 	} else {

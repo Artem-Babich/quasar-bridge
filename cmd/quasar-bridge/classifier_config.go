@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"time"
 
@@ -92,4 +93,15 @@ func applyClassifierEnv(cfg *config) {
 			*target = value
 		}
 	}
+}
+
+// logClassifierBackend names the active route classifier at startup. It never
+// logs the API key.
+func logClassifierBackend(cfg config) {
+	if cfg.ClassifierAPI != "decisions" {
+		slog.Info("classifier_backend", "backend", "llm")
+		return
+	}
+	slog.Info("classifier_backend", "backend", "decisions", "model", cfg.ClassifierModel,
+		"decisions_timeout_ms", cfg.Routing.Classifier.DecisionsTimeout().Milliseconds())
 }
