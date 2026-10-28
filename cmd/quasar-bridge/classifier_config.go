@@ -27,6 +27,9 @@ func validateClassifier(cfg *config) error {
 		if os.Getenv("QUASAR_CLASSIFIER_API_KEY") == "" {
 			return errors.New("classifier_api decisions requires QUASAR_CLASSIFIER_API_KEY")
 		}
+		if c := cfg.Routing.Classifier; c.DecisionsTimeoutMS >= c.TimeoutMS {
+			return errors.New("classifier decisions_timeout_ms must be shorter than timeout_ms, or 0 for 1500 ms")
+		}
 	default:
 		return errors.New("classifier_api must be llm or decisions")
 	}
