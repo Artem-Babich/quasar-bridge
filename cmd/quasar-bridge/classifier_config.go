@@ -13,6 +13,7 @@ import (
 // validateClassifier checks the fork's classifier settings. With "llm" the
 // Decisions URL and model are ignored, so switching back is one field.
 func validateClassifier(cfg *config) error {
+	applyClassifierEnv(cfg)
 	switch cfg.ClassifierAPI {
 	case "":
 		cfg.ClassifierAPI = "llm"
@@ -61,4 +62,18 @@ func checkBackendsLine(homeEnabled bool, entities int, classifierStatus string) 
 		return "LLM: ok; Home Assistant: disabled" + classifierStatus
 	}
 	return fmt.Sprintf("LLM: ok; Home Assistant: %d entities%s", entities, classifierStatus)
+}
+
+// applyClassifierEnv lets runtime.env switch the classifier without changing
+// config.json. A variable that is set wins even when empty.
+func applyClassifierEnv(cfg *config) {
+	for name, target := range map[string]*string{
+		"QUASAR_CLASSIFIER_API":      &cfg.ClassifierAPI,
+		"QUASAR_CLASSIFIER_BASE_URL": &cfg.ClassifierBaseURL,
+		"QUASAR_CLASSIFIER_MODEL":    &cfg.ClassifierModel,
+	} {
+		if value, ok := os.LookupEnv(name); ok {
+			*target = value
+		}
+	}
 }
