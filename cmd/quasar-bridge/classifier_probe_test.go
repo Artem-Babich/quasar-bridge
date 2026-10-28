@@ -20,7 +20,7 @@ import (
 
 func TestCheckBackendsReportsColdAndWarmLatency(t *testing.T) {
 	out, err := runClassifierChild(t, "check-backends", http.StatusOK)
-	pattern := regexp.MustCompile(`LLM: ok; Home Assistant: disabled; Classifier: decisions ok, route (home|llm|yandex), confidence 0\.80, cold \d+ ms, warm \d+ ms \(timeout 1500 ms\)\n`)
+	pattern := regexp.MustCompile(`LLM: ok; Home Assistant: disabled; Classifier: decisions ok, route (home|llm|yandex), confidence 0\.80, cold \d+ ms (new|reused) connection, warm \d+ ms (new|reused) connection \(timeout 1500 ms\)\n`)
 	if err != nil || !pattern.MatchString(out) {
 		t.Fatalf("err=%v output:\n%s", err, out)
 	}

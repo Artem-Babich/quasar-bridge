@@ -60,17 +60,31 @@ func checkClassifier(ctx context.Context, c *llm.DecisionsClient, classifier bri
 	}
 	cold := time.Since(start)
 	start = time.Now()
-	if _, err := c.ChooseRoute(ctx, classifier.Prompt, probe, routes); err != nil {
+	second, err := c.ChooseRoute(ctx, classifier.Prompt, probe, routes)
+	if err != nil {
 		return "", err
 	}
 	warm := time.Since(start)
 	timeout := classifier.DecisionsTimeout()
-	status := fmt.Sprintf("; Classifier: decisions ok, route %s, confidence %.2f, cold %d ms, warm %d ms (timeout %d ms)",
-		answer.Route, answer.Confidence, cold.Milliseconds(), warm.Milliseconds(), timeout.Milliseconds())
+	status := fmt.Sprintf("; Classifier: decisions ok, route %s, confidence %.2f, cold %d ms %s, warm %d ms %s (timeout %d ms)",
+		answer.Route, answer.Confidence, cold.Milliseconds(), connection(answer.ConnReused),
+		warm.Milliseconds(), connection(second.ConnReused), timeout.Milliseconds())
 	if cold > timeout {
 		status += "; WARNING: cold call exceeds decisions_timeout_ms"
 	}
 	return status, nil
+}
+
+// connection says whether a probe call reused a kept-alive connection.
+func connection(reused *bool) string {
+	switch {
+	case reused == nil:
+		return "connection unknown"
+	case *reused:
+		return "reused connection"
+	default:
+		return "new connection"
+	}
 }
 
 // checkBackendsLine is the -check-backends summary line.

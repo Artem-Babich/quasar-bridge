@@ -1270,7 +1270,7 @@ Decisions игнорируются.
 есть `backend` (`decisions` или `llm`), `latency_ms`, `confidence` и
 `error_class` (почему не ответил Decisions: `http_<код>`, `transport`, `timeout`,
 `canceled`, `refusal`, `bad_response`). `-check-backends` дописывает в конец строки
-`; Classifier: decisions ok, route …, confidence …, cold N ms, warm M ms (timeout T ms)`
+`; Classifier: decisions ok, route …, confidence …, cold N ms new connection, warm M ms reused connection (timeout T ms)`
 и завершается с ошибкой, если Decisions не ответил. При старте в журнал пишется
 строка `classifier_backend` с бэкендом, моделью и тайм-аутом (без ключа).
 В строке решения также есть `decisions_ms`, `conn_reused`, а при сбое `error_code`

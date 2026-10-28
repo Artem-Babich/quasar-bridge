@@ -18,12 +18,17 @@ type RouteChooser interface {
 
 var _ RouteChooser = (*llm.DecisionsClient)(nil)
 
-// DecisionsTimeout is decisions_timeout_ms, or 1500 ms when it is 0.
+// DecisionsTimeout is decisions_timeout_ms, or 1500 ms when it is 0, capped
+// at timeout_ms.
 func (c ClassifierConfig) DecisionsTimeout() time.Duration {
+	timeout := 1500 * time.Millisecond
 	if c.DecisionsTimeoutMS > 0 {
-		return time.Duration(c.DecisionsTimeoutMS) * time.Millisecond
+		timeout = time.Duration(c.DecisionsTimeoutMS) * time.Millisecond
 	}
-	return 1500 * time.Millisecond
+	if c.TimeoutMS > 0 {
+		timeout = min(timeout, time.Duration(c.TimeoutMS)*time.Millisecond)
+	}
+	return timeout
 }
 
 // chooseWithDecisions asks Decisions within decisions_timeout_ms. The caller's
