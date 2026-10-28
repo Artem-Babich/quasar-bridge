@@ -9,8 +9,10 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptrace"
 	"slices"
 	"strings"
+	"time"
 )
 
 // DecisionsClient asks the OpenAI Decisions API to pick one route.
@@ -24,6 +26,14 @@ type DecisionsClient struct {
 type RouteAnswer struct {
 	Route      string
 	Confidence float64
+	DecisionsCall
+}
+
+// DecisionsCall describes one HTTP exchange for the route decision log.
+type DecisionsCall struct {
+	DurationMS int64
+	ConnReused *bool
+	RequestID  string
 }
 
 // DecisionsError tells the caller why Decisions gave no usable route.
@@ -32,6 +42,8 @@ type RouteAnswer struct {
 type DecisionsError struct {
 	Class  string
 	Status int
+	Code   string // OpenAI error.code, if the body had one
+	DecisionsCall
 }
 
 func (e *DecisionsError) Error() string {
@@ -76,9 +88,20 @@ func (c *DecisionsClient) ChooseRoute(ctx context.Context, instructions string, 
 	if err != nil {
 		return RouteAnswer{}, &DecisionsError{Class: "bad_response"}
 	}
+	var call DecisionsCall
+	began := time.Now()
+	fail := func(e *DecisionsError) (RouteAnswer, error) {
+		call.DurationMS = time.Since(began).Milliseconds()
+		e.DecisionsCall = call
+		return RouteAnswer{}, e
+	}
+	ctx = httptrace.WithClientTrace(ctx, &httptrace.ClientTrace{GotConn: func(info httptrace.GotConnInfo) {
+		reused := info.Reused
+		call.ConnReused = &reused
+	}})
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(c.BaseURL, "/")+"/decisions", bytes.NewReader(body))
 	if err != nil {
-		return RouteAnswer{}, &DecisionsError{Class: "transport"}
+		return fail(&DecisionsError{Class: "transport"})
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+c.APIKey)
@@ -88,18 +111,26 @@ func (c *DecisionsClient) ChooseRoute(ctx context.Context, instructions string, 
 	}
 	resp, err := hc.Do(req)
 	if err != nil {
-		return RouteAnswer{}, contextOr(ctx, "transport")
+		return fail(contextOr(ctx, "transport"))
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return RouteAnswer{}, &DecisionsError{Class: "http", Status: resp.StatusCode}
-	}
+	call.RequestID = resp.Header.Get("X-Request-Id")
 	data, err := io.ReadAll(io.LimitReader(resp.Body, maxDecisionsResponseBytes+1))
+	if resp.StatusCode != http.StatusOK {
+		// Keep only the machine-readable code; the message can echo input.
+		var apiError struct {
+			Error struct {
+				Code string `json:"code"`
+			} `json:"error"`
+		}
+		_ = json.Unmarshal(data, &apiError)
+		return fail(&DecisionsError{Class: "http", Status: resp.StatusCode, Code: apiError.Error.Code})
+	}
 	if err != nil {
-		return RouteAnswer{}, contextOr(ctx, "transport")
+		return fail(contextOr(ctx, "transport"))
 	}
 	if len(data) > maxDecisionsResponseBytes {
-		return RouteAnswer{}, &DecisionsError{Class: "bad_response"}
+		return fail(&DecisionsError{Class: "bad_response"})
 	}
 	var result struct {
 		Answers []struct {
@@ -109,20 +140,21 @@ func (c *DecisionsClient) ChooseRoute(ctx context.Context, instructions string, 
 		} `json:"answers"`
 	}
 	if err := json.Unmarshal(data, &result); err != nil || len(result.Answers) == 0 {
-		return RouteAnswer{}, &DecisionsError{Class: "bad_response"}
+		return fail(&DecisionsError{Class: "bad_response"})
 	}
 	a := result.Answers[0]
 	if a.Type == "refusal" {
-		return RouteAnswer{}, &DecisionsError{Class: "refusal"}
+		return fail(&DecisionsError{Class: "refusal"})
 	}
 	var route string
 	if a.Type != "choice" || json.Unmarshal(a.Choice, &route) != nil || !slices.Contains(routes, route) {
-		return RouteAnswer{}, &DecisionsError{Class: "bad_response"}
+		return fail(&DecisionsError{Class: "bad_response"})
 	}
-	return RouteAnswer{Route: route, Confidence: a.Confidence}, nil
+	call.DurationMS = time.Since(began).Milliseconds()
+	return RouteAnswer{Route: route, Confidence: a.Confidence, DecisionsCall: call}, nil
 }
 
-func contextOr(ctx context.Context, class string) error {
+func contextOr(ctx context.Context, class string) *DecisionsError {
 	switch {
 	case errors.Is(ctx.Err(), context.DeadlineExceeded):
 		return &DecisionsError{Class: "timeout"}
