@@ -18,16 +18,18 @@ type RouteChooser interface {
 
 var _ RouteChooser = (*llm.DecisionsClient)(nil)
 
-const defaultDecisionsTimeout = 1500 * time.Millisecond
+// DecisionsTimeout is decisions_timeout_ms, or 1500 ms when it is 0.
+func (c ClassifierConfig) DecisionsTimeout() time.Duration {
+	if c.DecisionsTimeoutMS > 0 {
+		return time.Duration(c.DecisionsTimeoutMS) * time.Millisecond
+	}
+	return 1500 * time.Millisecond
+}
 
 // chooseWithDecisions asks Decisions within decisions_timeout_ms. The caller's
 // context already caps the whole classifier step at timeout_ms.
 func (e *Engine) chooseWithDecisions(ctx context.Context, c ClassifierConfig, snapshot dialogue.Snapshot, text string) (RouteDecision, error) {
-	timeout := defaultDecisionsTimeout
-	if c.DecisionsTimeoutMS > 0 {
-		timeout = time.Duration(c.DecisionsTimeoutMS) * time.Millisecond
-	}
-	ctx, cancel := context.WithTimeout(ctx, timeout)
+	ctx, cancel := context.WithTimeout(ctx, c.DecisionsTimeout())
 	defer cancel()
 	var messages []llm.Message
 	if !snapshot.PrivateHistory {

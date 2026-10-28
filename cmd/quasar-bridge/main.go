@@ -207,7 +207,7 @@ func main() {
 				slog.Error("LLM check failed")
 				os.Exit(1)
 			}
-			classifierStatus, err := checkClassifier(ctx, decisions, cfg.Routing.Classifier.Prompt)
+			classifierStatus, err := checkClassifier(ctx, decisions, cfg.Routing.Classifier)
 			if err != nil {
 				slog.Error("Decisions classifier check failed", "error", err)
 				os.Exit(1)

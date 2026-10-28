@@ -7,6 +7,7 @@ import (
 	"os"
 	"time"
 
+	"quasarbridge/internal/bridge"
 	"quasarbridge/internal/llm"
 )
 
@@ -42,18 +43,33 @@ func validateClassifier(cfg *config) error {
 	return nil
 }
 
-// checkClassifier probes Decisions for -check-backends. It returns the text
-// appended to the check line, or nothing when Decisions is off.
-func checkClassifier(ctx context.Context, c *llm.DecisionsClient, prompt string) (string, error) {
+// checkClassifier probes Decisions for -check-backends with a cold and a warm
+// call. It returns the text appended to the check line, or nothing when
+// Decisions is off.
+func checkClassifier(ctx context.Context, c *llm.DecisionsClient, classifier bridge.ClassifierConfig) (string, error) {
 	if c == nil {
 		return "", nil
 	}
+	probe := []llm.Message{{Role: "user", Content: "Ответь одним словом: связь"}}
+	routes := []string{"home", "llm", "yandex"}
 	start := time.Now()
-	_, err := c.ChooseRoute(ctx, prompt, []llm.Message{{Role: "user", Content: "Ответь одним словом: связь"}}, []string{"home", "llm", "yandex"})
+	answer, err := c.ChooseRoute(ctx, classifier.Prompt, probe, routes)
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("; Classifier: decisions ok (%d ms)", time.Since(start).Milliseconds()), nil
+	cold := time.Since(start)
+	start = time.Now()
+	if _, err := c.ChooseRoute(ctx, classifier.Prompt, probe, routes); err != nil {
+		return "", err
+	}
+	warm := time.Since(start)
+	timeout := classifier.DecisionsTimeout()
+	status := fmt.Sprintf("; Classifier: decisions ok, route %s, confidence %.2f, cold %d ms, warm %d ms (timeout %d ms)",
+		answer.Route, answer.Confidence, cold.Milliseconds(), warm.Milliseconds(), timeout.Milliseconds())
+	if cold > timeout {
+		status += "; WARNING: cold call exceeds decisions_timeout_ms"
+	}
+	return status, nil
 }
 
 // checkBackendsLine is the -check-backends summary line.
