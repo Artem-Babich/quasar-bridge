@@ -1,8 +1,13 @@
 package main
 
 import (
+	"context"
 	"errors"
+	"fmt"
 	"os"
+	"time"
+
+	"quasarbridge/internal/llm"
 )
 
 // validateClassifier checks the fork's classifier settings. With "llm" the
@@ -26,4 +31,18 @@ func validateClassifier(cfg *config) error {
 		return errors.New("classifier_api must be llm or decisions")
 	}
 	return nil
+}
+
+// checkClassifier probes Decisions for -check-backends. It returns the text
+// appended to the check line, or nothing when Decisions is off.
+func checkClassifier(ctx context.Context, c *llm.DecisionsClient, prompt string) (string, error) {
+	if c == nil {
+		return "", nil
+	}
+	start := time.Now()
+	_, err := c.ChooseRoute(ctx, prompt, []llm.Message{{Role: "user", Content: "Ответь одним словом: связь"}}, []string{"home", "llm", "yandex"})
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("; Classifier: decisions ok (%d ms)", time.Since(start).Milliseconds()), nil
 }
