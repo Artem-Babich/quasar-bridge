@@ -30,5 +30,10 @@ func reloadRouting(path string, initial config, engine *bridge.Engine, logs ...*
 			return err
 		}
 	}
-	return engine.SetRouting(next.Routing)
+	if err := engine.SetRouting(next.Routing); err != nil {
+		return err
+	}
+	// Fork: show the reloaded Decisions timeout in the journal.
+	logClassifierBackend(next)
+	return nil
 }
