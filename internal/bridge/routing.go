@@ -45,6 +45,13 @@ type RouteDecision struct {
 	Route    string `json:"route"`
 	Rule     string `json:"rule,omitempty"`
 	Source   string `json:"source"`
+
+	// Classifier observability (fork). Left empty for rule, follow-up and
+	// default decisions so their output stays as before.
+	Backend    string  `json:"backend,omitzero"`
+	Confidence float64 `json:"confidence,omitzero"`
+	LatencyMS  int64   `json:"latency_ms,omitzero"`
+	ErrorClass string  `json:"error_class,omitzero"`
 }
 type compiledRule struct {
 	name, route       string

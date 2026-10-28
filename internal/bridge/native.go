@@ -535,7 +535,7 @@ func (n *Native) maybeResolve(p *nativeRequest) {
 				n.mu.Lock()
 				p.listenOnStreamStart = decision.Source == "dialogue_retry"
 				n.mu.Unlock()
-				slog.Info("native_route_decision", "request", requestTag(p.id), "route", decision.Route, "source", decision.Source)
+				slog.Info("native_route_decision", routeDecisionLogArgs(requestTag(p.id), decision)...)
 				stop := func() {}
 				if decision.Route != "yandex" && n.ProgressAfter > 0 {
 					stop = n.progress(p)

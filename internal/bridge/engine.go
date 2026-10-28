@@ -239,6 +239,15 @@ func (e *Engine) Decide(ctx context.Context, text string) (decision RouteDecisio
 	if e.LLM == nil {
 		return failed
 	}
+
+	start := time.Now()
+	defer func() {
+		if decision.Backend == "" {
+			decision.Backend = "llm"
+		}
+		decision.LatencyMS = time.Since(start).Milliseconds()
+	}()
+
 	classCtx, cancel := context.WithTimeout(ctx, time.Duration(p.classifier.TimeoutMS)*time.Millisecond)
 	defer cancel()
 	messages := []llm.Message{{Role: "system", Content: p.classifier.Prompt}}
