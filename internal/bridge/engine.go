@@ -38,6 +38,9 @@ type Engine struct {
 	Dialogue     *dialogue.Store
 	dialogueOnce sync.Once
 	routing      atomic.Pointer[RoutingPolicy]
+
+	// Fork: optional faster route classifier; nil keeps the Claude classifier.
+	Decisions RouteChooser
 }
 
 func (e *Engine) dialogue() *dialogue.Store {
@@ -239,6 +242,27 @@ func (e *Engine) Decide(ctx context.Context, text string) (decision RouteDecisio
 	if e.LLM == nil {
 		return failed
 	}
+
+	start := time.Now()
+	var decisionsFailure string
+	defer func() {
+		if decision.Backend == "" {
+			decision.Backend = "llm"
+			decision.ErrorClass = decisionsFailure
+		}
+		decision.LatencyMS = time.Since(start).Milliseconds()
+	}()
+	if e.Decisions != nil {
+		var cancelStep context.CancelFunc
+		ctx, cancelStep = context.WithDeadline(ctx, start.Add(time.Duration(p.classifier.TimeoutMS)*time.Millisecond))
+		defer cancelStep()
+		d, err := e.chooseWithDecisions(ctx, p.classifier, snapshot, text)
+		if err == nil {
+			return d
+		}
+		decisionsFailure = decisionsErrorClass(err)
+	}
+
 	classCtx, cancel := context.WithTimeout(ctx, time.Duration(p.classifier.TimeoutMS)*time.Millisecond)
 	defer cancel()
 	messages := []llm.Message{{Role: "system", Content: p.classifier.Prompt}}

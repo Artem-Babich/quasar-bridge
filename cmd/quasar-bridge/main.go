@@ -185,6 +185,14 @@ func main() {
 		slog.Error("routing rejected", "error", err)
 		os.Exit(1)
 	}
+
+	// Fork: optional Decisions route classifier.
+	var decisions *llm.DecisionsClient
+	if cfg.ClassifierAPI == "decisions" {
+		decisions = &llm.DecisionsClient{BaseURL: cfg.ClassifierBaseURL, Model: cfg.ClassifierModel, APIKey: os.Getenv("QUASAR_CLASSIFIER_API_KEY")}
+		engine.Decisions = decisions
+	}
+
 	if *query != "" || *check || *route != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), 75*time.Second)
 		defer cancel()
@@ -199,8 +207,13 @@ func main() {
 				slog.Error("LLM check failed")
 				os.Exit(1)
 			}
+			classifierStatus, err := checkClassifier(ctx, decisions, cfg.Routing.Classifier.Prompt)
+			if err != nil {
+				slog.Error("Decisions classifier check failed", "error", err)
+				os.Exit(1)
+			}
 			if hc == nil {
-				fmt.Println("LLM: ok; Home Assistant: disabled")
+				fmt.Println(checkBackendsLine(false, 0, classifierStatus))
 				return
 			}
 			entities, err := hc.Entities(ctx)
@@ -208,7 +221,7 @@ func main() {
 				slog.Error("Home Assistant check failed", "error", err)
 				os.Exit(1)
 			}
-			fmt.Printf("LLM: ok; Home Assistant: %d entities\n", len(entities))
+			fmt.Println(checkBackendsLine(true, len(entities), classifierStatus))
 			return
 		}
 		r, err := engine.Resolve(ctx, *query)

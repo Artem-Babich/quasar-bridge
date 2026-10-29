@@ -1229,6 +1229,43 @@ LLM получает задачи с рассуждением в несколь�
 | `prompt` | Русская инструкция из полного примера | Системная инструкция классификатору; ожидается JSON `{"route":"home"}`, `{"route":"llm"}` или `{"route":"yandex"}` |
 | `timeout_ms` | `8000` | Время классификации, от 1 до 60000 мс |
 | `on_error` | `yandex` | `home`, `llm` или `yandex` при ошибке, тайм-ауте, неверном JSON или неизвестном ответе маршрута |
+| `decisions_timeout_ms` | `0` (= 1500) | Только с `classifier_api: "decisions"`: время на ответ Decisions, от 0 до 60000 мс и меньше `timeout_ms` (0 считается как 1500), иначе конфиг не принимается; весь шаг классификации всё равно не дольше `timeout_ms` |
+
+### Классификатор на OpenAI Decisions (форк)
+
+По умолчанию маршрут выбирает тот же LLM, что отвечает (`classifier_api: "llm"`).
+С `classifier_api: "decisions"` несовпавшую фразу сначала классифицирует
+[OpenAI Decisions API](https://developers.openai.com/api/docs/guides/decisions)
+(один вопрос `choice` с вариантами `home`, `llm`, `yandex`, инструкция —
+`classifier.prompt`). Если Decisions вернул ошибку HTTP, отказ, неизвестный
+маршрут или не уложился в `decisions_timeout_ms`, маршрут выбирает LLM-классификатор
+как обычно; если и он не смог — применяется `on_error`.
+
+| Поле верхнего уровня | По умолчанию | Назначение |
+| --- | --- | --- |
+| `classifier_api` | `llm` | `llm` или `decisions` |
+| `classifier_base_url` | — | Обязателен для `decisions`, например `https://api.openai.com/v1` |
+| `classifier_model` | — | Обязателен для `decisions`, например `gpt-6-luna` |
+
+Ключ — переменная `QUASAR_CLASSIFIER_API_KEY` в `runtime.env`; без неё
+конфигурация с `decisions` отклоняется. Поля верхнего уровня применяются после
+перезапуска, `decisions_timeout_ms` — по `SIGHUP`. При `llm` адрес и модель
+Decisions игнорируются.
+
+Ограничения:
+
+- уверенность (`confidence`) только пишется в лог и не влияет на маршрут;
+- в Decisions уходит та же инструкция и история диалога, что и LLM-классификатору,
+  кроме приватной истории (после поиска по истории запросов уходит только фраза);
+- сбой Decisions добавляет до `decisions_timeout_ms` перед LLM-классификатором;
+- соединение не прогревается: после 90 с простоя первый запрос медленнее;
+- старый бинарник без этих полей не запустится с такой конфигурацией.
+
+В журнале `native_route_decision` и в выводе `-route` у решений классификатора
+есть `backend` (`decisions` или `llm`), `latency_ms`, `confidence` и
+`error_class` (почему не ответил Decisions: `http_<код>`, `transport`, `timeout`,
+`canceled`, `refusal`, `bad_response`). `-check-backends` дописывает в конец строки
+`; Classifier: decisions ok (N ms)` и завершается с ошибкой, если Decisions не ответил.
 
 Например, `"default_route": "yandex"` полностью убирает классификацию для
 несовпавших запросов. Обычная генерация ответа LLM и планирование HA при этом
