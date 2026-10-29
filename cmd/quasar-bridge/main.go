@@ -207,7 +207,7 @@ func main() {
 				slog.Error("LLM check failed")
 				os.Exit(1)
 			}
-			classifierStatus, err := checkClassifier(ctx, decisions, cfg.Routing.Classifier.Prompt)
+			classifierStatus, err := checkClassifier(ctx, decisions, cfg.Routing.Classifier)
 			if err != nil {
 				slog.Error("Decisions classifier check failed", "error", err)
 				os.Exit(1)
@@ -334,6 +334,7 @@ func main() {
 		_ = server.Shutdown(shutdownCtx)
 	}()
 	slog.Info("listening", "address", cfg.Listen, "mode", cfg.Mode, "routing_revision", engine.RoutingStatus().Revision)
+	logClassifierBackend(cfg)
 	if cfg.TLSCert != "" && cfg.TLSKey != "" {
 		err = server.ListenAndServeTLS(cfg.TLSCert, cfg.TLSKey)
 	} else {

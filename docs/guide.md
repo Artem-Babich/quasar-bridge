@@ -1247,6 +1247,11 @@ LLM получает задачи с рассуждением в несколь�
 | `classifier_base_url` | — | Обязателен для `decisions`, например `https://api.openai.com/v1` |
 | `classifier_model` | — | Обязателен для `decisions`, например `gpt-6-luna` |
 
+Поля верхнего уровня можно задать и переменными `QUASAR_CLASSIFIER_API`,
+`QUASAR_CLASSIFIER_BASE_URL`, `QUASAR_CLASSIFIER_MODEL` (они перекрывают JSON, даже
+пустые). Порядок включения, проверки и отката — в
+[decisions-classifier.md](decisions-classifier.md).
+
 Ключ — переменная `QUASAR_CLASSIFIER_API_KEY` в `runtime.env`; без неё
 конфигурация с `decisions` отклоняется. Поля верхнего уровня применяются после
 перезапуска, `decisions_timeout_ms` — по `SIGHUP`. При `llm` адрес и модель
@@ -1265,7 +1270,11 @@ Decisions игнорируются.
 есть `backend` (`decisions` или `llm`), `latency_ms`, `confidence` и
 `error_class` (почему не ответил Decisions: `http_<код>`, `transport`, `timeout`,
 `canceled`, `refusal`, `bad_response`). `-check-backends` дописывает в конец строки
-`; Classifier: decisions ok (N ms)` и завершается с ошибкой, если Decisions не ответил.
+`; Classifier: decisions ok, route …, confidence …, cold N ms new connection, warm M ms reused connection (timeout T ms)`
+и завершается с ошибкой, если Decisions не ответил. При старте в журнал пишется
+строка `classifier_backend` с бэкендом, моделью и тайм-аутом (без ключа).
+В строке решения также есть `decisions_ms`, `conn_reused`, а при сбое `error_code`
+и `request_id`.
 
 Например, `"default_route": "yandex"` полностью убирает классификацию для
 несовпавших запросов. Обычная генерация ответа LLM и планирование HA при этом

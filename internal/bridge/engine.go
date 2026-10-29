@@ -244,11 +244,11 @@ func (e *Engine) Decide(ctx context.Context, text string) (decision RouteDecisio
 	}
 
 	start := time.Now()
-	var decisionsFailure string
+	var decisionsFailure RouteDecision
 	defer func() {
 		if decision.Backend == "" {
 			decision.Backend = "llm"
-			decision.ErrorClass = decisionsFailure
+			decision.keepDecisionsFailure(decisionsFailure)
 		}
 		decision.LatencyMS = time.Since(start).Milliseconds()
 	}()
@@ -260,7 +260,7 @@ func (e *Engine) Decide(ctx context.Context, text string) (decision RouteDecisio
 		if err == nil {
 			return d
 		}
-		decisionsFailure = decisionsErrorClass(err)
+		decisionsFailure = d
 	}
 
 	classCtx, cancel := context.WithTimeout(ctx, time.Duration(p.classifier.TimeoutMS)*time.Millisecond)

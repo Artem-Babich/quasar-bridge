@@ -55,6 +55,11 @@ type RouteDecision struct {
 	Confidence float64 `json:"confidence,omitzero"`
 	LatencyMS  int64   `json:"latency_ms,omitzero"`
 	ErrorClass string  `json:"error_class,omitzero"`
+
+	DecisionsMS int64  `json:"decisions_ms,omitzero"`
+	ConnReused  *bool  `json:"conn_reused,omitzero"`
+	ErrorCode   string `json:"error_code,omitzero"`
+	RequestID   string `json:"request_id,omitzero"`
 }
 type compiledRule struct {
 	name, route       string
