@@ -311,3 +311,26 @@ func TestRouteContextOffKeepsTheOldClassifierInput(t *testing.T) {
 		t.Fatalf("Decisions saw %q", messageTexts(got))
 	}
 }
+
+// User story: Decisions fails while the dialogue is private, for example just
+// after a search in the request history. Its Claude fallback picks the route
+// from the phrase alone, as Decisions would have.
+func TestWhileTheDialogueIsPrivateClaudeClassifierGetsOnlyThePhrase(t *testing.T) {
+	var got []llm.Message
+	e := decisionsEngine(t, routeContextConfig(), func(context.Context, string, []llm.Message, []string) (llm.RouteAnswer, error) {
+		return llm.RouteAnswer{}, &llm.DecisionsError{Class: "timeout"}
+	}, func(_ context.Context, m []llm.Message, _ bool) (string, error) {
+		got = slices.Clone(m)
+		return `{"route":"yandex"}`, nil
+	})
+	speaker := dialogue.WithSpeaker(t.Context(), "device:speaker")
+	e.RecordRouteTurn(e.Prepare(speaker), "yandex", "открытый вопрос", "открытый ответ", true)
+	ctx := e.Prepare(speaker)
+	_, _, ticket := e.dialogue().Start(ctx)
+	e.dialogue().Commit(ctx, ticket, "найди в истории про пароль", "Нашла запись.", true)
+	e.RecordRouteTurn(ctx, "llm", "найди в истории про пароль", "Нашла запись.", true)
+	e.Decide(e.Prepare(speaker), "сочини стих")
+	if len(got) != 2 || got[0].Role != "system" || got[1].Role != "user" || got[1].Content != "сочини стих" {
+		t.Fatalf("Claude classifier saw %q", messageTexts(got))
+	}
+}

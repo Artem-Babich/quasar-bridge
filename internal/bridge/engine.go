@@ -256,6 +256,9 @@ func (e *Engine) Decide(ctx context.Context, text string) (decision RouteDecisio
 	if p.classifier.RouteContext {
 		history = e.dialogue().RouteContext(ctx)
 		history.PrivateHistory = history.PrivateHistory || snapshot.PrivateHistory
+		if history.PrivateHistory {
+			history.Messages = nil
+		}
 	}
 
 	start := time.Now()
