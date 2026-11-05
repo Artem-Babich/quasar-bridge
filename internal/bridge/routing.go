@@ -36,6 +36,10 @@ type ClassifierConfig struct {
 
 	// Fork: time allowed for the Decisions classifier; 0 means 1500 ms.
 	DecisionsTimeoutMS int `json:"decisions_timeout_ms,omitzero"`
+
+	// Fork: classifiers read the tagged all-routes record instead of Claude's
+	// dialogue. Goes with a prompt that explains the tags, so it is opt-in.
+	RouteContext bool `json:"route_context,omitzero"`
 }
 type RefusalConfig struct {
 	Enabled     bool     `json:"enabled"`

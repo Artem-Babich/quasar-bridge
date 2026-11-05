@@ -94,6 +94,7 @@ func (e *Engine) ResolveDecision(ctx context.Context, text string, decision Rout
 	}
 	if decision.Source == "dialogue_reset" {
 		e.dialogue().ClearReplay(ctx, ticket)
+		e.dialogue().ClearRouteContext(ctx, ticket)
 		if !e.dialogue().Clear(ctx, ticket) {
 			return Resolution{Route: route}, context.Canceled
 		}
@@ -253,6 +254,13 @@ func (e *Engine) Decide(ctx context.Context, text string) (decision RouteDecisio
 		return failed
 	}
 
+	// Fork: the classifiers may read all routes; the answer dialogue stays as is.
+	history := snapshot
+	if p.classifier.RouteContext {
+		history = e.dialogue().RouteContext(ctx)
+		history.PrivateHistory = history.PrivateHistory || snapshot.PrivateHistory
+	}
+
 	start := time.Now()
 	var decisionsFailure RouteDecision
 	defer func() {
@@ -266,7 +274,7 @@ func (e *Engine) Decide(ctx context.Context, text string) (decision RouteDecisio
 		var cancelStep context.CancelFunc
 		ctx, cancelStep = context.WithDeadline(ctx, start.Add(time.Duration(p.classifier.TimeoutMS)*time.Millisecond))
 		defer cancelStep()
-		d, err := e.chooseWithDecisions(ctx, p.classifier, snapshot, text)
+		d, err := e.chooseWithDecisions(ctx, p.classifier, history, text)
 		if err == nil {
 			return d
 		}
@@ -276,7 +284,7 @@ func (e *Engine) Decide(ctx context.Context, text string) (decision RouteDecisio
 	classCtx, cancel := context.WithTimeout(ctx, time.Duration(p.classifier.TimeoutMS)*time.Millisecond)
 	defer cancel()
 	messages := []llm.Message{{Role: "system", Content: p.classifier.Prompt}}
-	messages = append(messages, snapshot.Messages...)
+	messages = append(messages, history.Messages...)
 	messages = append(messages, llm.Message{Role: "user", Content: text})
 	answer, err := e.LLM.Complete(classCtx, messages, true)
 	if err != nil {

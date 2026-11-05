@@ -28,6 +28,21 @@ func (e *Engine) RecordDelivered(ctx context.Context, question, answer string, f
 	e.dialogue().CaptureReplay(ctx, ticket, question, answer, final, action, view.PrivateHistory, isRetryCommand(question))
 }
 
+// RecordRouteTurn keeps a delivered reply for the route classifiers. Fork.
+func (e *Engine) RecordRouteTurn(ctx context.Context, route, question, answer string, final bool) {
+	ctx, view, ticket := e.dialogue().Start(ctx)
+	e.dialogue().CaptureRouteTurn(ctx, ticket, routeTag(route), question, answer, final, view.PrivateHistory)
+}
+
+// routeTag names a handler the way the classifier prompt does. Music and
+// player control are local handlers of the llm side.
+func routeTag(route string) string {
+	if route == "home" || route == "yandex" {
+		return route
+	}
+	return "llm"
+}
+
 func (e *Engine) retryQuestion(ctx context.Context, ticket dialogue.Ticket) (Resolution, error) {
 	result := Resolution{Route: "llm"}
 	replay, ok := e.dialogue().Replay(ctx, ticket)
