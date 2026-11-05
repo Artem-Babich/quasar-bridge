@@ -261,6 +261,11 @@ func main() {
 			}()
 		}
 
+		// Fork: first phrase after a pause should not pay for a new connection.
+		decisionsWarmCtx, decisionsWarmCancel := context.WithCancel(context.Background())
+		defer decisionsWarmCancel()
+		keepDecisionsWarm(decisionsWarmCtx, decisions)
+
 		proxy.NewSession = func(ctx context.Context, up, down bridge.Sender) bridge.Session {
 			n := bridge.NewNative(ctx, up, down, engine)
 			n.GateText = false
