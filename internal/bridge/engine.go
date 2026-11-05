@@ -238,10 +238,7 @@ func (e *Engine) Decide(ctx context.Context, text string) (decision RouteDecisio
 		return RouteDecision{Route: "playback", Source: "playback"}
 	}
 	if d, ok := p.match(text); ok {
-		if d.Route == "llm" && e.Music != nil && e.Music.CanStartMusic(text) {
-			d.Route = "music"
-		}
-		return d
+		return e.withMusic(d, text)
 	}
 	if len(snapshot.Messages) > 0 && dialogue.IsFollowup(text) {
 		return RouteDecision{Route: "llm", Source: "dialogue"}
@@ -276,7 +273,7 @@ func (e *Engine) Decide(ctx context.Context, text string) (decision RouteDecisio
 		defer cancelStep()
 		d, err := e.chooseWithDecisions(ctx, p.classifier, history, text)
 		if err == nil {
-			return d
+			return e.withMusic(d, text)
 		}
 		decisionsFailure = d
 	}
@@ -296,5 +293,13 @@ func (e *Engine) Decide(ctx context.Context, text string) (decision RouteDecisio
 	if json.Unmarshal([]byte(answer), &choice) != nil || !directRoute(choice.Route) {
 		return failed
 	}
-	return RouteDecision{Route: choice.Route, Source: "classifier"}
+	return e.withMusic(RouteDecision{Route: choice.Route, Source: "classifier"}, text)
+}
+
+// withMusic starts site music directly when an llm choice is a music command.
+func (e *Engine) withMusic(d RouteDecision, text string) RouteDecision {
+	if d.Route == "llm" && e.Music != nil && e.Music.CanStartMusic(text) {
+		d.Route = "music"
+	}
+	return d
 }
