@@ -21,10 +21,16 @@ func (n *Native) captureDelivered(p *nativeRequest, text string, final, action, 
 		n.mu.Unlock()
 		return
 	}
-	question, ctx := p.text, p.ctx
+	question, ctx, route := p.text, p.ctx, p.route
 	action = action || (p.route != "" && p.route != "llm" && p.route != "yandex")
 	n.mu.Unlock()
 	recorder.RecordDelivered(ctx, question, text, final, action)
+	// Fork: every delivered reply also feeds the route classifiers.
+	if routes, ok := n.resolver.(interface {
+		RecordRouteTurn(context.Context, string, string, string, bool)
+	}); ok {
+		routes.RecordRouteTurn(ctx, route, question, text, final)
+	}
 }
 func cloudResponseText(r *response.TAliceResponseProto) string {
 	if text := r.GetVoiceResponse().GetOutputSpeech().GetText(); text != "" {

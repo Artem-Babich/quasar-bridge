@@ -94,6 +94,7 @@ func (e *Engine) ResolveDecision(ctx context.Context, text string, decision Rout
 	}
 	if decision.Source == "dialogue_reset" {
 		e.dialogue().ClearReplay(ctx, ticket)
+		e.dialogue().ClearRouteContext(ctx, ticket)
 		if !e.dialogue().Clear(ctx, ticket) {
 			return Resolution{Route: route}, context.Canceled
 		}
@@ -237,10 +238,7 @@ func (e *Engine) Decide(ctx context.Context, text string) (decision RouteDecisio
 		return RouteDecision{Route: "playback", Source: "playback"}
 	}
 	if d, ok := p.match(text); ok {
-		if d.Route == "llm" && e.Music != nil && e.Music.CanStartMusic(text) {
-			d.Route = "music"
-		}
-		return d
+		return e.withMusic(d, text)
 	}
 	if len(snapshot.Messages) > 0 && dialogue.IsFollowup(text) {
 		return RouteDecision{Route: "llm", Source: "dialogue"}
@@ -251,6 +249,16 @@ func (e *Engine) Decide(ctx context.Context, text string) (decision RouteDecisio
 	failed := RouteDecision{Route: p.classifier.OnError, Source: "classifier_error"}
 	if e.LLM == nil {
 		return failed
+	}
+
+	// Fork: the classifiers may read all routes; the answer dialogue stays as is.
+	history := snapshot
+	if p.classifier.RouteContext {
+		history = e.dialogue().RouteContext(ctx)
+		history.PrivateHistory = history.PrivateHistory || snapshot.PrivateHistory
+		if history.PrivateHistory {
+			history.Messages = nil
+		}
 	}
 
 	start := time.Now()
@@ -266,9 +274,9 @@ func (e *Engine) Decide(ctx context.Context, text string) (decision RouteDecisio
 		var cancelStep context.CancelFunc
 		ctx, cancelStep = context.WithDeadline(ctx, start.Add(time.Duration(p.classifier.TimeoutMS)*time.Millisecond))
 		defer cancelStep()
-		d, err := e.chooseWithDecisions(ctx, p.classifier, snapshot, text)
+		d, err := e.chooseWithDecisions(ctx, p.classifier, history, text)
 		if err == nil {
-			return d
+			return e.withMusic(d, text)
 		}
 		decisionsFailure = d
 	}
@@ -276,7 +284,7 @@ func (e *Engine) Decide(ctx context.Context, text string) (decision RouteDecisio
 	classCtx, cancel := context.WithTimeout(ctx, time.Duration(p.classifier.TimeoutMS)*time.Millisecond)
 	defer cancel()
 	messages := []llm.Message{{Role: "system", Content: p.classifier.Prompt}}
-	messages = append(messages, snapshot.Messages...)
+	messages = append(messages, history.Messages...)
 	messages = append(messages, llm.Message{Role: "user", Content: text})
 	answer, err := e.LLM.Complete(classCtx, messages, true)
 	if err != nil {
@@ -288,5 +296,13 @@ func (e *Engine) Decide(ctx context.Context, text string) (decision RouteDecisio
 	if json.Unmarshal([]byte(answer), &choice) != nil || !directRoute(choice.Route) {
 		return failed
 	}
-	return RouteDecision{Route: choice.Route, Source: "classifier"}
+	return e.withMusic(RouteDecision{Route: choice.Route, Source: "classifier"}, text)
+}
+
+// withMusic starts site music directly when an llm choice is a music command.
+func (e *Engine) withMusic(d RouteDecision, text string) RouteDecision {
+	if d.Route == "llm" && e.Music != nil && e.Music.CanStartMusic(text) {
+		d.Route = "music"
+	}
+	return d
 }

@@ -445,6 +445,7 @@ func (n *Native) Server(ctx context.Context, k websocket.MessageType, data []byt
 
 		if resolver, ok := n.resolver.(FallbackResolver); ok && n.isRefusal(text) {
 			p.local = true
+			p.route = "llm"
 			if n.OnRoute != nil {
 				n.OnRoute(p.id, "llm")
 			}
@@ -533,7 +534,7 @@ func (n *Native) maybeResolve(p *nativeRequest) {
 			if routed, ok := n.resolver.(RoutedResolver); ok {
 				decision := routed.Decide(p.ctx, text)
 				n.mu.Lock()
-				p.listenOnStreamStart = decision.Source == "dialogue_retry"
+				p.listenOnStreamStart = decision.Route == "llm"
 				n.mu.Unlock()
 				slog.Info("native_route_decision", routeDecisionLogArgs(requestTag(p.id), decision)...)
 				stop := func() {}

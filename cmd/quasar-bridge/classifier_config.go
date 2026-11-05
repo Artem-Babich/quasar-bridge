@@ -44,6 +44,17 @@ func validateClassifier(cfg *config) error {
 	return nil
 }
 
+// decisionsWarmInterval stays below the 90 s the default HTTP transport keeps
+// an idle connection.
+const decisionsWarmInterval = 60 * time.Second
+
+// keepDecisionsWarm does nothing when Decisions is off.
+func keepDecisionsWarm(ctx context.Context, c *llm.DecisionsClient) {
+	if c != nil {
+		go c.KeepWarm(ctx, decisionsWarmInterval)
+	}
+}
+
 // checkClassifier probes Decisions for -check-backends with a cold and a warm
 // call. It returns the text appended to the check line, or nothing when
 // Decisions is off.
