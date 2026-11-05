@@ -20,7 +20,8 @@ import (
 type MCP struct {
 	URL         string
 	HTTP        *http.Client
-	mu          sync.Mutex
+	startOnce   sync.Once
+	start       chan struct{} // one initialize at a time; waiters keep their time limits
 	initialized bool
 	sequence    atomic.Int64
 	sessionMu   sync.RWMutex
@@ -37,15 +38,20 @@ type rpcResponse struct {
 func (c *MCP) Call(ctx context.Context, name string, args map[string]any) (jsontext.Value, error) {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	c.mu.Lock()
+	c.startOnce.Do(func() { c.start = make(chan struct{}, 1) })
+	select {
+	case c.start <- struct{}{}:
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
 	if !c.initialized {
 		if _, err := c.request(ctx, "initialize", map[string]any{"protocolVersion": "2025-03-26", "capabilities": map[string]any{}, "clientInfo": map[string]string{"name": "quasar-bridge", "version": "0.1"}}); err != nil {
-			c.mu.Unlock()
+			<-c.start
 			return nil, err
 		}
 		c.initialized = true
 	}
-	c.mu.Unlock()
+	<-c.start
 	raw, err := c.request(ctx, "tools/call", map[string]any{"name": name, "arguments": args})
 	if err != nil {
 		return nil, err
