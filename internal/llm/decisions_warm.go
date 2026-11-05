@@ -51,6 +51,9 @@ func (c *DecisionsClient) ping(ctx context.Context) int {
 	}
 	resp, err := hc.Do(req)
 	if err != nil {
+		// Pooled HTTP/2 connections are shared: a dead one would stall the next
+		// route choice too, so the next request has to dial again.
+		hc.CloseIdleConnections()
 		return 0
 	}
 	defer resp.Body.Close()

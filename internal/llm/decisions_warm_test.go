@@ -8,6 +8,7 @@ package llm
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -110,3 +111,52 @@ func TestKeepWarmReopensAConnectionThatWasLost(t *testing.T) {
 		t.Fatalf("keeper stopped after a lost connection: pings=%d", pings.Load())
 	}
 }
+
+// failingTransport fails every request and counts how often the idle
+// connections were closed.
+type failingTransport struct {
+	closed atomic.Int32
+}
+
+func (f *failingTransport) RoundTrip(*http.Request) (*http.Response, error) {
+	return nil, errors.New("connection lost")
+}
+
+func (f *failingTransport) CloseIdleConnections() { f.closed.Add(1) }
+
+// User story: the network drops and the pooled connection stays dead. A failed
+// keep-warm request drops the idle connections, so the next route choice opens
+// a new one instead of stalling on the dead one until its timeout.
+func TestKeepWarmDropsIdleConnectionsAfterAFailedRequest(t *testing.T) {
+	transport := &failingTransport{}
+	c := &DecisionsClient{BaseURL: "https://example.invalid/v1", Model: "route/model", APIKey: "key", HTTP: &http.Client{Transport: transport}}
+	if status := c.ping(t.Context()); status != 0 {
+		t.Fatalf("status = %d", status)
+	}
+	if transport.closed.Load() != 1 {
+		t.Fatalf("idle connections closed %d times", transport.closed.Load())
+	}
+}
+
+// User story: any HTTP answer proves the connection is alive, even an error
+// status, so the keeper leaves it in the pool.
+func TestKeepWarmKeepsTheConnectionAfterAnErrorStatus(t *testing.T) {
+	var closed atomic.Int32
+	c, _ := warmClient(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+	}, time.Minute)
+	c.HTTP.Transport = closeCounter{RoundTripper: c.HTTP.Transport, closed: &closed}
+	if status := c.ping(t.Context()); status != http.StatusUnauthorized {
+		t.Fatalf("status = %d", status)
+	}
+	if closed.Load() != 0 {
+		t.Fatalf("idle connections closed %d times", closed.Load())
+	}
+}
+
+type closeCounter struct {
+	http.RoundTripper
+	closed *atomic.Int32
+}
+
+func (c closeCounter) CloseIdleConnections() { c.closed.Add(1) }
