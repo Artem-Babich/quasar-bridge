@@ -77,6 +77,9 @@ sudo cp -p /etc/quasar-bridge/runtime.env.pre-decisions /etc/quasar-bridge/runti
   ⚠️ Это поле в `config.json`: перед откатом на старый бинарник его нужно убрать
   (см. «Откатить бинарник»).
 - В выводе `-route` должно быть `"backend":"decisions"`.
+- После запуска в журнале должна быть строка `decisions_keep_warm` со `status` 200:
+  `sudo journalctl -u quasar-bridge -n 50 -o cat | grep decisions_keep_warm`.
+  Новая строка появляется только при смене статуса. `status` 0 значит, что ответа нет.
 
 ## Смотреть данные
 
@@ -131,6 +134,6 @@ sudo install -m 755 /opt/quasar-bridge/quasar-bridge.prev /opt/quasar-bridge/qua
   && sudo systemctl restart quasar-bridge
 ```
 
-⚠️ Если поля `classifier_*` или `decisions_timeout_ms` всё же попали в
+⚠️ Если поля `classifier_*`, `decisions_timeout_ms` или `route_context` всё же попали в
 `config.json`, сначала уберите их. Старый бинарник отклоняет незнакомые поля,
 не запускается, и колонка остаётся без моста.
