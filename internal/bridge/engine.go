@@ -41,6 +41,16 @@ type Engine struct {
 
 	// Fork: optional faster route classifier; nil keeps the Claude classifier.
 	Decisions RouteChooser
+
+	// Fork: optional stronger model for spoken answers; nil keeps LLM.
+	Answers Completer
+}
+
+func (e *Engine) answerModel() Completer {
+	if e.Answers != nil {
+		return e.Answers
+	}
+	return e.LLM
 }
 
 func (e *Engine) dialogue() *dialogue.Store {
@@ -139,7 +149,7 @@ func (e *Engine) Fallback(ctx context.Context, text string) (Resolution, error) 
 	if e.LLM == nil && e.Assistant == nil {
 		return r, errors.New("LLM is not configured")
 	}
-	answerer := e.LLM
+	answerer := e.answerModel()
 	if e.Assistant != nil {
 		answerer = e.Assistant
 	}
