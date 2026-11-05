@@ -57,6 +57,11 @@ type entry struct {
 	at            time.Time
 	generation    uint64
 	pending       bool
+
+	// Fork: record of all routes for the route classifiers.
+	routeTurns   []routeTurn
+	routePartial string
+	routeDone    bool
 }
 type Snapshot struct {
 	Messages       []llm.Message
@@ -105,6 +110,7 @@ func (s *Store) View(ctx context.Context) Snapshot {
 		e.turns = nil
 		e.replay = nil
 		e.replayReady = false
+		e.routeTurns = nil
 		if !e.pending {
 			delete(s.entries, key(ctx))
 			e = nil
@@ -123,6 +129,7 @@ func (s *Store) Begin(ctx context.Context) (Snapshot, Ticket) {
 			e.turns = nil
 			e.replay = nil
 			e.replayReady = false
+			e.routeTurns = nil
 			if !e.pending {
 				delete(s.entries, k)
 			}
@@ -148,6 +155,7 @@ func (s *Store) Begin(ctx context.Context) (Snapshot, Ticket) {
 		e.turns = nil
 		e.replay = nil
 		e.replayReady = false
+		e.routeTurns = nil
 	}
 	var replay *replayState
 	if e.replayReady && len(e.replay) > 0 {
@@ -157,6 +165,8 @@ func (s *Store) Begin(ctx context.Context) (Snapshot, Ticket) {
 	e.replayPartial = ""
 	e.replayInvalid = false
 	e.retryAnswered = false
+	e.routePartial = ""
+	e.routeDone = false
 	e.pending = true
 	s.generation++
 	e.generation = s.generation
