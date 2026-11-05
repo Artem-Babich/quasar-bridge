@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"syscall"
@@ -144,7 +145,8 @@ func main() {
 		MaxOutputTokens: cfg.LLMMaxOutputTokens, HostedTools: cfg.LLMHostedTools,
 		ChatParameters: cfg.LLMChatParameters,
 	}
-	engine := &bridge.Engine{LLM: lc, Dialogue: dialogue.New(cfg.DialogueContext)}
+	answers := answerClient(lc, cfg.LLMAnswerModel)
+	engine := &bridge.Engine{LLM: lc, Answers: answers, Dialogue: dialogue.New(cfg.DialogueContext)}
 	var musicQueue *assistant.MusicQueue
 	var hc *home.Controller
 	if endpoint := os.Getenv("QUASAR_HOME_MCP_URL"); endpoint != "" {
@@ -179,7 +181,7 @@ func main() {
 		}
 		tools := &assistant.Tools{Config: cfg.AssistantTools, JournalConfig: source, WebReader: reader, Playback: musicPlayback}
 		engine.Music = tools
-		engine.Assistant = &assistant.Agent{Client: lc, Tools: tools, MaxRounds: cfg.AssistantTools.MaxRounds, MaxCalls: cfg.AssistantTools.MaxCalls}
+		engine.Assistant = &assistant.Agent{Client: answers, Tools: tools, MaxRounds: cfg.AssistantTools.MaxRounds, MaxCalls: cfg.AssistantTools.MaxCalls}
 	}
 	if err := engine.SetRouting(cfg.Routing); err != nil {
 		slog.Error("routing rejected", "error", err)
@@ -202,10 +204,11 @@ func main() {
 			return
 		}
 		if *check {
-			_, err := lc.Complete(ctx, []llm.Message{{Role: "user", Content: "Ответь одним словом: связь"}}, false)
-			if err != nil {
-				slog.Error("LLM check failed")
-				os.Exit(1)
+			for _, client := range slices.Compact([]*llm.Client{lc, answers}) {
+				if _, err := client.Complete(ctx, []llm.Message{{Role: "user", Content: "Ответь одним словом: связь"}}, false); err != nil {
+					slog.Error("LLM check failed")
+					os.Exit(1)
+				}
 			}
 			classifierStatus, err := checkClassifier(ctx, decisions, cfg.Routing.Classifier)
 			if err != nil {
@@ -344,4 +347,14 @@ func main() {
 		slog.Error("listener failed")
 		os.Exit(1)
 	}
+}
+
+// Fork: spoken answers may use a stronger model on the same API and key.
+func answerClient(main *llm.Client, model string) *llm.Client {
+	if model == "" {
+		return main
+	}
+	answers := *main
+	answers.Model = model
+	return &answers
 }

@@ -1568,6 +1568,7 @@ sudo systemctl disable --now quasar-bridge
 | `allowed_ips` | `QUASAR_ALLOWED_IPS` | JSON-массив или список IP через запятую; пустой отключает фильтр |
 | `llm_base_url` | `QUASAR_LLM_BASE_URL` | Базовый API URL с `/v1` |
 | `llm_model` | `QUASAR_LLM_MODEL` | Идентификатор модели |
+| `llm_answer_model` | `QUASAR_LLM_ANSWER_MODEL` | Необязательная модель для ответов на вопросы, тот же API и ключ; `llm_model` остаётся для дома и выбора маршрута. Пусто — `llm_model` везде; требуется перезапуск |
 | `llm_api` | `QUASAR_LLM_API` | `chat_completions` по умолчанию, либо `responses`; пустое значение выбирает `chat_completions` |
 | `llm_chat_parameters` | — | Явные параметры Chat Completions; `null` удаляет поле из запроса. По умолчанию пусто; требуется перезапуск |
 | `llm_reasoning_effort` | `QUASAR_LLM_REASONING_EFFORT` | Необязательный effort для Responses; допустимые значения зависят от модели |
