@@ -25,7 +25,7 @@ func (e *Engine) RecordDelivered(ctx context.Context, question, answer string, f
 	if dialogue.IsReset(question) {
 		action = true
 	}
-	e.dialogue().CaptureReplay(ctx, ticket, question, answer, final, action, view.PrivateHistory, isRetryCommand(question))
+	e.dialogue().CaptureReplay(ctx, ticket, stripAskModelPrefix(question), answer, final, action, view.PrivateHistory, isRetryCommand(question))
 }
 
 // RecordRouteTurn keeps a delivered reply for the route classifiers. Fork.
