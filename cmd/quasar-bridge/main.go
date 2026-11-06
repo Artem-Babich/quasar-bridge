@@ -181,7 +181,7 @@ func main() {
 		}
 		tools := &assistant.Tools{Config: cfg.AssistantTools, JournalConfig: source, WebReader: reader, Playback: musicPlayback}
 		engine.Music = tools
-		engine.Assistant = &assistant.Agent{Client: answers, Tools: tools, MaxRounds: cfg.AssistantTools.MaxRounds, MaxCalls: cfg.AssistantTools.MaxCalls}
+		useAssistant(engine, answers, tools, cfg.AssistantTools)
 	}
 	if err := engine.SetRouting(cfg.Routing); err != nil {
 		slog.Error("routing rejected", "error", err)

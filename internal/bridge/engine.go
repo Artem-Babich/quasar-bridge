@@ -44,6 +44,9 @@ type Engine struct {
 
 	// Fork: optional stronger model for spoken answers; nil keeps LLM.
 	Answers Completer
+
+	// Fork: Claude has the ha-mcp list tools and keeps the shopping list.
+	ShoppingByTools bool
 }
 
 func (e *Engine) answerModel() Completer {
@@ -154,11 +157,15 @@ func (e *Engine) Fallback(ctx context.Context, text string) (Resolution, error) 
 	if e.Assistant != nil {
 		answerer = e.Assistant
 	}
+	hint := ""
+	if e.ShoppingByTools {
+		hint = shoppingToolsHint
+	}
 	ctx, snapshot, ticket := e.dialogue().Start(ctx)
 	if !e.dialogue().Current(ctx, ticket) {
 		return r, context.Canceled
 	}
-	messages := []llm.Message{{Role: "system", Content: "Ты голосовой помощник пользователя. Отвечай по-русски, кратко и по существу, обычно до трёх предложений. Ответ будет прочитан вслух: без Markdown и служебных рассуждений. Выполняй внешние действия только доступными инструментами по явному запросу пользователя. Не заявляй о выполнении действий без успешного результата инструмента; если инструмента нет, прямо скажи об этом. Для Home Assistant есть отдельный обработчик умного дома."}}
+	messages := []llm.Message{{Role: "system", Content: "Ты голосовой помощник пользователя. Отвечай по-русски, кратко и по существу, обычно до трёх предложений. Ответ будет прочитан вслух: без Markdown и служебных рассуждений. Выполняй внешние действия только доступными инструментами по явному запросу пользователя. Не заявляй о выполнении действий без успешного результата инструмента; если инструмента нет, прямо скажи об этом. Для Home Assistant есть отдельный обработчик умного дома." + hint}}
 	messages = append(messages, snapshot.Messages...)
 	messages = append(messages, llm.Message{Role: "user", Content: text})
 	private := snapshot.PrivateHistory
