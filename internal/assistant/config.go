@@ -20,6 +20,7 @@ type Config struct {
 	Timezone         string            `json:"timezone"`
 	MaxRounds        int               `json:"max_rounds"`
 	MaxCalls         int               `json:"max_calls"`
+	ParallelCalls    bool              `json:"parallel_calls"`
 	WebTimeoutMS     int               `json:"web_timeout_ms"`
 	WebMaxBytes      int               `json:"web_max_bytes"`
 	WebMaxChars      int               `json:"web_max_chars"`

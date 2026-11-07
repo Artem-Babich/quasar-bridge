@@ -48,6 +48,7 @@ type Client struct {
 	ReasoningEffort string
 	MaxOutputTokens int
 	HostedTools     []string
+	ParallelTools   bool
 	ChatParameters  map[string]any
 	HTTP            *http.Client
 }
@@ -117,7 +118,7 @@ func (c *Client) chatCompletions(ctx context.Context, messages []Message, struct
 	if len(tools) > 0 {
 		request["tools"] = tools
 		request["tool_choice"] = "auto"
-		request["parallel_tool_calls"] = false
+		request["parallel_tool_calls"] = c.ParallelTools
 	}
 	data, err := c.post(ctx, "/chat/completions", request)
 	if err != nil {

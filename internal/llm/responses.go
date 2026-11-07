@@ -82,7 +82,7 @@ func (c *Client) responses(ctx context.Context, messages []Message, structured b
 		request["tool_choice"] = "auto"
 	}
 	if len(tools) > 0 {
-		request["parallel_tool_calls"] = false
+		request["parallel_tool_calls"] = c.ParallelTools
 	}
 	data, err := c.post(ctx, "/responses", request)
 	if err != nil {

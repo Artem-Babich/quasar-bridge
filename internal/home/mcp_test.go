@@ -3,10 +3,12 @@ package home
 import (
 	"context"
 	"encoding/json/v2"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -83,4 +85,75 @@ func TestMCPAllowsConcurrentIndependentReads(t *testing.T) {
 	}
 	close(release)
 	wg.Wait()
+}
+
+// User story: ha-mcp hangs while the bridge connects to it for the first time.
+// A list command that arrives meanwhile has only a few seconds. It gives up in
+// time instead of waiting for the connection another command started, so the
+// owner hears the failure. Once ha-mcp answers, the next command works.
+func TestACommandDoesNotOutwaitItsTimeLimitBehindAHungFirstConnection(t *testing.T) {
+	hung := make(chan struct{})
+	release := make(chan struct{})
+	var once sync.Once
+	var connected atomic.Bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			ID     int64  `json:"id"`
+			Method string `json:"method"`
+		}
+		_ = json.UnmarshalRead(r.Body, &req)
+		if req.Method == "initialize" {
+			first := false
+			once.Do(func() { first = true })
+			if first {
+				close(hung)
+				select {
+				case <-release:
+				case <-r.Context().Done():
+				}
+				return
+			}
+			connected.Store(true)
+			fmt.Fprintf(w, `{"id":%d,"result":{}}`, req.ID)
+			return
+		}
+		if !connected.Load() {
+			http.Error(w, "not initialized", http.StatusBadRequest)
+			return
+		}
+		fmt.Fprintf(w, `{"id":%d,"result":{"structuredContent":{"success":true}}}`, req.ID)
+	}))
+	defer srv.Close()
+	defer close(release)
+	c := &MCP{URL: srv.URL}
+
+	firstDone := make(chan struct{})
+	firstCtx, stopFirst := context.WithCancel(t.Context())
+	go func() {
+		defer close(firstDone)
+		_, _ = c.Call(firstCtx, "first", nil)
+	}()
+	<-hung
+
+	limited, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
+	defer cancel()
+	finished := make(chan error, 1)
+	go func() {
+		_, err := c.Call(limited, "second", nil)
+		finished <- err
+	}()
+	select {
+	case err := <-finished:
+		if !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("err = %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("the command outwaited its time limit")
+	}
+
+	stopFirst()
+	<-firstDone
+	if _, err := c.Call(t.Context(), "third", nil); err != nil {
+		t.Fatalf("next command after the hang: %v", err)
+	}
 }
