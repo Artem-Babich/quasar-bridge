@@ -63,12 +63,13 @@ var serviceFields = map[string][]string{
 	"fan.turn_on": {"percentage"}, "fan.turn_off": {}, "fan.set_percentage": {"percentage"},
 	"vacuum.start": {}, "vacuum.pause": {}, "vacuum.stop": {}, "vacuum.return_to_base": {},
 	"media_player.turn_off": {}, "media_player.media_pause": {}, "media_player.media_stop": {}, "media_player.volume_set": {"volume_level"},
+	"button.press": {},
 }
 
 func (c *Controller) Entities(ctx context.Context) ([]Entity, error) {
 	domains := c.Domains
 	if len(domains) == 0 {
-		domains = []string{"light", "switch", "climate", "cover", "fan", "vacuum", "sensor", "binary_sensor", "media_player"}
+		domains = []string{"light", "switch", "climate", "cover", "fan", "vacuum", "sensor", "binary_sensor", "media_player", "button"}
 	}
 	var entities []Entity
 	seen := map[string]bool{}
