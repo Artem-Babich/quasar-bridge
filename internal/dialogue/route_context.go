@@ -7,7 +7,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"quasarbridge/internal/llm"
+	"github.com/skrashevich/quasar-bridge/internal/llm"
 )
 
 // Fork: limits of the record the route classifiers read.

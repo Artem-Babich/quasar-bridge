@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"quasarbridge/internal/llm"
+	"github.com/skrashevich/quasar-bridge/internal/llm"
 )
 
 func classifierOnlyEngine(t *testing.T, llmFn completionFunc) *Engine {

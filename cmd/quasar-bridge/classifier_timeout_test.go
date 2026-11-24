@@ -12,7 +12,7 @@ import (
 	"strings"
 	"testing"
 
-	"quasarbridge/internal/bridge"
+	"github.com/skrashevich/quasar-bridge/internal/bridge"
 )
 
 const decisionsHead = `{"classifier_api":"decisions","classifier_base_url":"https://api.openai.example/v1","classifier_model":"gpt-6-luna",`

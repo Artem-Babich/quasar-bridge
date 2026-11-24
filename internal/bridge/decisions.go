@@ -7,8 +7,8 @@ import (
 	"slices"
 	"time"
 
-	"quasarbridge/internal/dialogue"
-	"quasarbridge/internal/llm"
+	"github.com/skrashevich/quasar-bridge/internal/dialogue"
+	"github.com/skrashevich/quasar-bridge/internal/llm"
 )
 
 // RouteChooser picks a route without the answering LLM (OpenAI Decisions).

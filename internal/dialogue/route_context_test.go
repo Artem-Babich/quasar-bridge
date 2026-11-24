@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"quasarbridge/internal/llm"
+	"github.com/skrashevich/quasar-bridge/internal/llm"
 )
 
 func routeStore(t *testing.T) (*Store, context.Context, *time.Time) {

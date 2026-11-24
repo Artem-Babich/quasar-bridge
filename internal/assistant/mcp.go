@@ -16,7 +16,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"quasarbridge/internal/llm"
+	"github.com/skrashevich/quasar-bridge/internal/llm"
 )
 
 type MCPStatus struct {
@@ -212,7 +212,7 @@ func (t *mcpRequestTools) AllowedAfterHistory(name string) bool {
 	if tool, ok := t.tools[name]; ok {
 		return tool.connection.config.AllowPrivateHistory
 	}
-	return name != "read_webpage" && name != "play_sound" && name != "play_music" && !strings.HasPrefix(name, "mcp__")
+	return name != "check_quasar_bridge_update" && name != "install_quasar_bridge_update" && name != "read_webpage" && name != "play_sound" && name != "play_music" && !strings.HasPrefix(name, "mcp__")
 }
 func (t *mcpRequestTools) ToolStatus() string {
 	var failures []string

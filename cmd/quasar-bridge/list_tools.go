@@ -3,9 +3,9 @@ package main
 import (
 	"slices"
 
-	"quasarbridge/internal/assistant"
-	"quasarbridge/internal/bridge"
-	"quasarbridge/internal/llm"
+	"github.com/skrashevich/quasar-bridge/internal/assistant"
+	"github.com/skrashevich/quasar-bridge/internal/bridge"
+	"github.com/skrashevich/quasar-bridge/internal/llm"
 )
 
 // listWriteTool is the ha-mcp tool that creates and updates todo items.
@@ -16,7 +16,7 @@ const listWriteTool = "ha_set_todo_item"
 func useAssistant(engine *bridge.Engine, answers *llm.Client, tools assistant.Toolset, cfg assistant.Config) {
 	client := *answers
 	client.ParallelTools = cfg.ParallelCalls
-	engine.Assistant = &assistant.Agent{Client: &client, Tools: tools, MaxRounds: cfg.MaxRounds, MaxCalls: cfg.MaxCalls}
+	engine.Assistant = &assistant.Agent{Client: &client, Tools: tools, SystemPrompt: cfg.SystemPrompt, MaxRounds: cfg.MaxRounds, MaxCalls: cfg.MaxCalls}
 	engine.ShoppingByTools = claudeWritesTheList(cfg)
 }
 

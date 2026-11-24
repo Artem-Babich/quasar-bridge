@@ -12,7 +12,7 @@ import (
 	"strings"
 	"testing"
 
-	"quasarbridge/internal/llm"
+	"github.com/skrashevich/quasar-bridge/internal/llm"
 )
 
 func failingAnswers(context.Context, []llm.Message, bool) (string, error) {

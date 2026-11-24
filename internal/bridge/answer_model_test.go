@@ -9,7 +9,7 @@ import (
 	"context"
 	"testing"
 
-	"quasarbridge/internal/llm"
+	"github.com/skrashevich/quasar-bridge/internal/llm"
 )
 
 func modelSpy(name string, calls *[]string, answer string) completionFunc {
