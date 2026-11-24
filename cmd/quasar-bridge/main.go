@@ -307,6 +307,7 @@ func main() {
 		engine.Music = tools
 		useAssistant(engine, answers, tools, cfg.AssistantTools)
 	}
+	useYouTubeMusic(engine, os.Getenv("QUASAR_YTMUSIC_URL"))
 	if err := engine.SetRouting(cfg.Routing); err != nil {
 		slog.Error("routing rejected", "error", err)
 		os.Exit(1)

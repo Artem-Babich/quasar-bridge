@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/skrashevich/quasar-bridge/internal/llm"
-	"github.com/skrashevich/quasar-bridge/internal/playback"
 	"github.com/skrashevich/quasar-bridge/internal/reply"
 	"github.com/skrashevich/quasar-bridge/internal/webaddress"
 )
@@ -60,6 +59,9 @@ type Engine struct {
 
 	// Fork: Claude has the ha-mcp list tools and keeps the shopping list.
 	ShoppingByTools bool
+
+	// Fork: YouTube Music owns music: the classifiers may choose "music".
+	MusicRoute bool
 }
 
 func (e *Engine) answerModel() Completer {
@@ -116,7 +118,8 @@ func (e *Engine) ResolveDecision(ctx context.Context, text string, decision Rout
 		}
 		return Resolution{Route: "llm", Answer: "Начинаем новый разговор."}, nil
 	}
-	if (route != "llm" && route != "home") || (snapshot.Route != "" && snapshot.Route != route) {
+	e.quietOverMusic(ctx)
+	if !e.keepsDialogue(route) && ((route != "llm" && route != "home") || (snapshot.Route != "" && snapshot.Route != route)) {
 		if !e.dialogue().Clear(ctx, ticket) {
 			return Resolution{Route: route}, context.Canceled
 		}
@@ -178,13 +181,17 @@ func (e *Engine) ResolveDecision(ctx context.Context, text string, decision Rout
 		if !e.dialogue().Current(ctx, ticket) {
 			return result, context.Canceled
 		}
+		e.quietOverMusic(ctx)
 		result.Answer = answer
 		return result, err
+	case "music_unclear":
+		result.Answer = sayMusicUnclear
+		return result, nil
 	case "playback":
 		if e.Playback == nil {
 			return Resolution{Route: "yandex"}, nil
 		}
-		action := playback.Command(text)
+		action := e.playerCommand(text)
 		if action == "" {
 			return result, errors.New("unknown playback control")
 		}
@@ -349,7 +356,7 @@ func (e *Engine) Decide(ctx context.Context, text string) (decision RouteDecisio
 	if controller, ok := e.AirPlay.(AirPlayMediaController); ok && airPlayMediaCommand(text) != "" && controller.Active(ctx) {
 		return RouteDecision{Route: "airplay", Source: "airplay_media"}
 	}
-	if e.Playback != nil && playback.Command(text) != "" && e.Playback.Active(ctx) {
+	if e.playerRoute(ctx, text) {
 		return RouteDecision{Route: "playback", Source: "playback"}
 	}
 	wakewordTag, _ := ctx.Value(wakewordTagKey{}).(string)
@@ -366,7 +373,7 @@ func (e *Engine) Decide(ctx context.Context, text string) (decision RouteDecisio
 	}
 	failed := RouteDecision{Route: p.classifier.OnError, Source: "classifier_error"}
 	if e.LLM == nil {
-		return failed
+		return e.classifierFailed(failed, text)
 	}
 
 	// Fork: the classifiers may read all routes; the answer dialogue stays as is.
@@ -406,13 +413,13 @@ func (e *Engine) Decide(ctx context.Context, text string) (decision RouteDecisio
 	messages = append(messages, llm.Message{Role: "user", Content: text})
 	answer, err := e.LLM.Complete(classCtx, messages, true)
 	if err != nil {
-		return failed
+		return e.classifierFailed(failed, text)
 	}
 	var choice struct {
 		Route string `json:"route"`
 	}
-	if json.Unmarshal([]byte(answer), &choice) != nil || !directRoute(choice.Route) {
-		return failed
+	if json.Unmarshal([]byte(answer), &choice) != nil || !e.classifierRoute(choice.Route) {
+		return e.classifierFailed(failed, text)
 	}
 	return e.withMusic(RouteDecision{Route: choice.Route, Source: "classifier"}, text)
 }
