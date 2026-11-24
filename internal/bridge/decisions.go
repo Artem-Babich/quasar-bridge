@@ -41,7 +41,7 @@ func (e *Engine) chooseWithDecisions(ctx context.Context, c ClassifierConfig, sn
 		messages = slices.Clone(snapshot.Messages)
 	}
 	messages = append(messages, llm.Message{Role: "user", Content: text})
-	answer, err := e.Decisions.ChooseRoute(ctx, c.Prompt, messages, []string{"home", "llm", "yandex"})
+	answer, err := e.Decisions.ChooseRoute(ctx, c.Prompt, messages, e.classifierRoutes())
 	if err != nil {
 		failure := RouteDecision{ErrorClass: decisionsErrorClass(err)}
 		var de *llm.DecisionsError
