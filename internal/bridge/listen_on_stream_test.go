@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
-	"quasarbridge/internal/sound"
+	"github.com/skrashevich/quasar-bridge/internal/sound"
 )
 
 type routedSlowResolver struct {

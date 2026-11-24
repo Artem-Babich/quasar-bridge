@@ -11,8 +11,8 @@ import (
 	"strings"
 	"testing"
 
-	"quasarbridge/internal/bridge"
-	"quasarbridge/internal/llm"
+	"github.com/skrashevich/quasar-bridge/internal/bridge"
+	"github.com/skrashevich/quasar-bridge/internal/llm"
 )
 
 func probeServer(t *testing.T) *llm.DecisionsClient {

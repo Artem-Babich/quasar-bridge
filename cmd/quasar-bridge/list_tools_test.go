@@ -7,9 +7,9 @@ package main
 import (
 	"testing"
 
-	"quasarbridge/internal/assistant"
-	"quasarbridge/internal/bridge"
-	"quasarbridge/internal/llm"
+	"github.com/skrashevich/quasar-bridge/internal/assistant"
+	"github.com/skrashevich/quasar-bridge/internal/bridge"
+	"github.com/skrashevich/quasar-bridge/internal/llm"
 )
 
 func withListTools(names ...string) assistant.Config {

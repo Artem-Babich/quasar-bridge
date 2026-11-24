@@ -8,17 +8,17 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
-	common "github.com/freequasar/quasar-go-genproto/proto/alice/megamind/protos/common"
-	directives "github.com/freequasar/quasar-go-genproto/proto/alice/protos/api/alicekit/directives"
-	request "github.com/freequasar/quasar-go-genproto/proto/alice/protos/api/alicekit/events/alice_request"
-	cancellation "github.com/freequasar/quasar-go-genproto/proto/alice/protos/api/alicekit/events/cancel_request"
-	header "github.com/freequasar/quasar-go-genproto/proto/alice/protos/api/alicekit/events/common/event_header"
-	client "github.com/freequasar/quasar-go-genproto/proto/alice/protos/api/alicekit/protocol/client"
-	fileplayer "github.com/freequasar/quasar-go-genproto/proto/alice/protos/endpoint/capabilities/audio_file_player"
+	common "github.com/skrashevich/quasar-go-genproto/proto/alice/megamind/protos/common"
+	directives "github.com/skrashevich/quasar-go-genproto/proto/alice/protos/api/alicekit/directives"
+	request "github.com/skrashevich/quasar-go-genproto/proto/alice/protos/api/alicekit/events/alice_request"
+	cancellation "github.com/skrashevich/quasar-go-genproto/proto/alice/protos/api/alicekit/events/cancel_request"
+	header "github.com/skrashevich/quasar-go-genproto/proto/alice/protos/api/alicekit/events/common/event_header"
+	client "github.com/skrashevich/quasar-go-genproto/proto/alice/protos/api/alicekit/protocol/client"
+	fileplayer "github.com/skrashevich/quasar-go-genproto/proto/alice/protos/endpoint/capabilities/audio_file_player"
 	"google.golang.org/protobuf/proto"
 
-	"quasarbridge/internal/sound"
-	"quasarbridge/internal/wire"
+	"github.com/skrashevich/quasar-bridge/internal/sound"
+	"github.com/skrashevich/quasar-bridge/internal/wire"
 )
 
 func soundInput(id string) []byte {

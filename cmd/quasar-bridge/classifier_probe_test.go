@@ -14,8 +14,8 @@ import (
 	"testing"
 	"time"
 
-	"quasarbridge/internal/bridge"
-	"quasarbridge/internal/llm"
+	"github.com/skrashevich/quasar-bridge/internal/bridge"
+	"github.com/skrashevich/quasar-bridge/internal/llm"
 )
 
 func TestCheckBackendsReportsColdAndWarmLatency(t *testing.T) {

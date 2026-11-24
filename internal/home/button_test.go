@@ -13,7 +13,7 @@ import (
 	"encoding/json/v2"
 	"testing"
 
-	"quasarbridge/internal/llm"
+	"github.com/skrashevich/quasar-bridge/internal/llm"
 )
 
 type buttonFixture struct {

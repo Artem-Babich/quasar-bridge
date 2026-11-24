@@ -17,8 +17,8 @@ import (
 	"testing"
 	"time"
 
-	"quasarbridge/internal/dialogue"
-	"quasarbridge/internal/llm"
+	"github.com/skrashevich/quasar-bridge/internal/dialogue"
+	"github.com/skrashevich/quasar-bridge/internal/llm"
 )
 
 type chooserFunc func(context.Context, string, []llm.Message, []string) (llm.RouteAnswer, error)

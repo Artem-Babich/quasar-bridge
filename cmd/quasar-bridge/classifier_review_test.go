@@ -14,7 +14,7 @@ import (
 	"strings"
 	"testing"
 
-	"quasarbridge/internal/bridge"
+	"github.com/skrashevich/quasar-bridge/internal/bridge"
 )
 
 func TestCheckBackendsLineCarriesClassifierStatusWithHomeAssistant(t *testing.T) {

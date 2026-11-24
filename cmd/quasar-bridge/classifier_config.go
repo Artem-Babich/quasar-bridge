@@ -8,8 +8,8 @@ import (
 	"os"
 	"time"
 
-	"quasarbridge/internal/bridge"
-	"quasarbridge/internal/llm"
+	"github.com/skrashevich/quasar-bridge/internal/bridge"
+	"github.com/skrashevich/quasar-bridge/internal/llm"
 )
 
 // validateClassifier checks the fork's classifier settings. With "llm" the

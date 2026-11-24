@@ -14,13 +14,13 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
-	common "github.com/freequasar/quasar-go-genproto/proto/alice/megamind/protos/common"
-	request "github.com/freequasar/quasar-go-genproto/proto/alice/protos/api/alicekit/events/alice_request"
-	header "github.com/freequasar/quasar-go-genproto/proto/alice/protos/api/alicekit/events/common/event_header"
-	client "github.com/freequasar/quasar-go-genproto/proto/alice/protos/api/alicekit/protocol/client"
+	common "github.com/skrashevich/quasar-go-genproto/proto/alice/megamind/protos/common"
+	request "github.com/skrashevich/quasar-go-genproto/proto/alice/protos/api/alicekit/events/alice_request"
+	header "github.com/skrashevich/quasar-go-genproto/proto/alice/protos/api/alicekit/events/common/event_header"
+	client "github.com/skrashevich/quasar-go-genproto/proto/alice/protos/api/alicekit/protocol/client"
 
-	"quasarbridge/internal/llm"
-	"quasarbridge/internal/wire"
+	"github.com/skrashevich/quasar-bridge/internal/llm"
+	"github.com/skrashevich/quasar-bridge/internal/wire"
 )
 
 type lockedBuffer struct {
