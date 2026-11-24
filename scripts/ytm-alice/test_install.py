@@ -44,7 +44,7 @@ class InstallTest(unittest.TestCase):
         self.bin = build_arm64(self.tmp)
         self.stage = self.tmp / "out"
         env = dict(os.environ, YTM_ALICE_ROOT=str(self.tmp / "root"))
-        subprocess.run(["sh", str(HERE / "install.sh"), "--dry-run", str(self.stage), str(fake_package(self.tmp)), str(self.bin), "root@speaker", "192.0.2.10"], check=True, env=env, capture_output=True)
+        subprocess.run(["sh", str(HERE / "install.sh"), "--dry-run", str(self.stage), str(fake_package(self.tmp)), str(self.bin), "root@192.0.2.20", "192.0.2.10"], check=True, env=env, capture_output=True)
         self.files = self.stage / "stage"
 
     def test_fork_binary_replaces_the_packaged_one_without_the_media_layer(self):
@@ -53,7 +53,7 @@ class InstallTest(unittest.TestCase):
         names = sorted(p.name for p in (self.files / "bin").iterdir())
         self.assertEqual(names, ["ytm-alice", "ytm-alice-player", "ytm-alice-player-arm64", "ytm-alice-player-armhf", "ytm-alice-resolver"])
 
-    def run_hook(self, action, fake_player):
+    def run_hook(self, action, fake_player, iptables_fails=False, check=True):
         root = self.tmp / "root"
         (root / "bin").mkdir(parents=True, exist_ok=True)
         player = root / "bin/ytm-alice"
@@ -63,12 +63,13 @@ class InstallTest(unittest.TestCase):
         shim.mkdir(exist_ok=True)
         calls = self.tmp / "calls"
         for ipt in ["iptables", "ip6tables"]:
-            (shim / ipt).write_text(f'#!/bin/sh\necho "{ipt} $*" >> {calls}\n[ "$1" = -D ] && exit 1\nexit 0\n')
+            fail = '[ "$1" = -N ] && exit 1\n[ "$1" = -C ] && exit 1\n' if iptables_fails else ''
+            (shim / ipt).write_text(f'#!/bin/sh\necho "{ipt} $*" >> {calls}\n[ "$1" = -D ] && exit 1\n{fail}exit 0\n')
             (shim / ipt).chmod(0o755)
         run = self.tmp / "run"
         run.mkdir(exist_ok=True)
         env = dict(os.environ, PATH=f"{shim}:{os.environ['PATH']}", YTM_ALICE_RUN=str(run))
-        subprocess.run(["sh", str(self.files / "S99zytm-alice"), action], check=True, env=env, timeout=10)
+        self.last = subprocess.run(["sh", str(self.files / "S99zytm-alice"), action], check=check, env=env, timeout=10, capture_output=True)
         return calls, run
 
     def test_hook_starts_the_player_without_voice_or_casting_and_guards_the_panel(self):
@@ -82,6 +83,7 @@ class InstallTest(unittest.TestCase):
         env = env_log.read_text()
         self.assertIn("YTM_ALICE_VOICE=0", env)
         self.assertIn("YTM_ALICE_CAST=0", env)
+        self.assertIn("YTM_ALICE_WEB_ADDR=192.0.2.20:24721", env, "the panel must listen on the speaker IPv4 only")
         rules = calls.read_text()
         self.assertIn("iptables -A YTM_ALICE -s 192.0.2.10 -j ACCEPT", rules)
         self.assertIn("iptables -A YTM_ALICE -j DROP", rules)
@@ -97,6 +99,17 @@ class InstallTest(unittest.TestCase):
         while time.time() < deadline and (not starts.exists() or len(starts.read_text().split()) < 2):
             time.sleep(0.2)
         self.assertGreaterEqual(len(starts.read_text().split()), 2, "a crashed player was not started again")
+
+    def test_player_does_not_start_when_the_panel_cannot_be_protected(self):
+        started = self.tmp / "started"
+        self.run_hook("start", f'#!/bin/sh\n[ "$1" = serve ] && touch {started}\nexit 0\n', iptables_fails=True, check=False)
+        self.assertNotEqual(self.last.returncode, 0)
+        time.sleep(1)
+        self.assertFalse(started.exists(), "player started with an open panel")
+
+    def test_install_refuses_a_speaker_without_an_ipv4_address(self):
+        r = subprocess.run(["sh", str(HERE / "install.sh"), "--dry-run", str(self.tmp / "o2"), str(fake_package(self.tmp)), str(self.bin), "root@speaker.lan", "192.0.2.10"], capture_output=True)
+        self.assertNotEqual(r.returncode, 0)
 
     def test_hook_turns_off_the_players_own_announcement(self):
         self.assertIn("announce-off", (self.files / "S99zytm-alice").read_text())

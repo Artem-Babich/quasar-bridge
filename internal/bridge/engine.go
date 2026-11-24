@@ -118,7 +118,10 @@ func (e *Engine) ResolveDecision(ctx context.Context, text string, decision Rout
 		}
 		return Resolution{Route: "llm", Answer: "Начинаем новый разговор."}, nil
 	}
-	e.quietOverMusic(ctx)
+	// Yandex replies come from the cloud; the panel is not asked for them.
+	if route != "yandex" {
+		e.quietOverMusic(ctx)
+	}
 	if !e.keepsDialogue(route) && ((route != "llm" && route != "home") || (snapshot.Route != "" && snapshot.Route != route)) {
 		if !e.dialogue().Clear(ctx, ticket) {
 			return Resolution{Route: route}, context.Canceled
@@ -356,7 +359,7 @@ func (e *Engine) Decide(ctx context.Context, text string) (decision RouteDecisio
 	if controller, ok := e.AirPlay.(AirPlayMediaController); ok && airPlayMediaCommand(text) != "" && controller.Active(ctx) {
 		return RouteDecision{Route: "airplay", Source: "airplay_media"}
 	}
-	if e.playerRoute(ctx, text) {
+	if e.playerRoute(ctx, text, len(snapshot.Messages) > 0 && snapshot.Route == "llm") {
 		return RouteDecision{Route: "playback", Source: "playback"}
 	}
 	wakewordTag, _ := ctx.Value(wakewordTagKey{}).(string)

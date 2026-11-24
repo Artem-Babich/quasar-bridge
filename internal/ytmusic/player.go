@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log/slog"
 	"strings"
+	"time"
 )
 
 // Approved sentences (owner decision 2026-11-07).
@@ -16,6 +17,7 @@ const (
 	sayNothing    = "Сейчас ничего не играет."
 	sayNoResume   = "Нечего продолжать."
 	sayFailed     = "Не удалось включить музыку на YouTube."
+	sayQueueEdge  = "Это последний трек в очереди."
 	sayOK         = "Хорошо."
 )
 
@@ -23,7 +25,7 @@ const (
 type Player struct {
 	Client *Client
 	// Silence makes the current speaker reply silent (an audio_stop reply
-	// without speech). It fails outside a speaker request, such as -query.
+	// without speech). Without it, or when it fails, the reply is «Хорошо.».
 	Silence func(context.Context) error
 }
 
@@ -61,8 +63,10 @@ func failureText(err error) string {
 	switch {
 	case strings.Contains(m, "(429)") || strings.Contains(m, "ограничил"):
 		return sayRateLimit
-	case strings.Contains(m, "не найдены"):
+	case strings.Contains(m, "не найден"):
 		return sayNotFound
+	case strings.Contains(m, "край очереди"):
+		return sayQueueEdge
 	case strings.Contains(m, "подключи youtube") || strings.Contains(m, "вход в youtube"):
 		return sayNeedLogin
 	case refused.Status >= 500:
@@ -71,10 +75,14 @@ func failureText(err error) string {
 	return sayFailed
 }
 
-// Active reports that YouTube owns the speaker's audio, even while paused.
+// Active reports music sounding now. A paused queue is quiet: «пауза»,
+// «хватит» then go to Yandex (an alarm may ring) and the microphone works.
+// The panel gets one second: every voice request asks.
 func (p *Player) Active(ctx context.Context) bool {
+	ctx, cancel := context.WithTimeout(ctx, time.Second)
+	defer cancel()
 	state, err := p.Client.Current(ctx)
-	return err == nil && state.Playing()
+	return err == nil && state.Sounding()
 }
 
 // HandlesIdle names the controls YouTube answers while nothing plays. Pause
@@ -109,7 +117,11 @@ func (p *Player) Control(ctx context.Context, action string) (string, error) {
 		}
 	case "restart":
 		action = "seek"
-	case "pause", "resume", "stop":
+	case "resume":
+		if !state.Playing() && len(state.Queue) == 0 {
+			return sayNoResume, nil
+		}
+	case "pause", "stop":
 	default:
 		return "", errors.New("unknown YouTube Music control")
 	}

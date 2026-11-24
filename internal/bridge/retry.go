@@ -37,7 +37,7 @@ func (e *Engine) RecordDelivered(ctx context.Context, question, answer string, f
 // RecordRouteTurn keeps a delivered reply for the route classifiers. Fork.
 func (e *Engine) RecordRouteTurn(ctx context.Context, route, question, answer string, final bool) {
 	ctx, view, ticket := e.dialogue().Start(ctx)
-	e.dialogue().CaptureRouteTurn(ctx, ticket, routeTag(route), question, answer, final, view.PrivateHistory)
+	e.dialogue().CaptureRouteTurn(ctx, ticket, e.routeTagFor(route), question, answer, final, view.PrivateHistory)
 }
 
 // routeTag names a handler the way the classifier prompt does. Music and

@@ -19,6 +19,7 @@ import (
 )
 
 type youTubeFixture struct {
+	asked   int
 	active  bool
 	started []string
 	actions []string
@@ -30,7 +31,7 @@ func (y *youTubeFixture) StartMusic(_ context.Context, text string) (string, err
 	y.active = true
 	return "Включаю: Кино — Кукушка.", nil
 }
-func (y *youTubeFixture) Active(context.Context) bool { return y.active }
+func (y *youTubeFixture) Active(context.Context) bool { y.asked++; return y.active }
 func (y *youTubeFixture) Control(_ context.Context, action string) (string, error) {
 	y.actions = append(y.actions, action)
 	return "", nil
@@ -159,5 +160,48 @@ func TestPlayerWordsWhileIdleAreAnsweredByYouTube(t *testing.T) {
 	yt.active = true
 	if d := e.Decide(t.Context(), "Хватит"); d.Route != "playback" {
 		t.Fatalf("«хватит» during music must stop YouTube: %+v", d)
+	}
+}
+
+func TestYandexRequestsDoNotWaitForThePlayer(t *testing.T) {
+	e, yt := youTubeEngine(t, func(context.Context, string, []llm.Message, []string) (llm.RouteAnswer, error) {
+		return llm.RouteAnswer{Route: "yandex"}, nil
+	}, failingClaude(t))
+	if _, err := e.Resolve(t.Context(), "Заведи таймер на минуту"); err != nil {
+		t.Fatal(err)
+	}
+	if yt.asked != 0 {
+		t.Fatalf("a Yandex request asked the player %d times", yt.asked)
+	}
+}
+
+func TestYouTubeRepliesAreTaggedMusicForTheClassifier(t *testing.T) {
+	cfg := DefaultRoutingConfig()
+	cfg.Classifier.RouteContext = true
+	e := decisionsEngine(t, cfg, func(context.Context, string, []llm.Message, []string) (llm.RouteAnswer, error) {
+		return llm.RouteAnswer{Route: "llm"}, nil
+	}, failingClaude(t))
+	e.MusicRoute = true
+	ctx := e.Prepare(dialogue.WithSpeaker(t.Context(), "device:speaker"))
+	e.RecordRouteTurn(ctx, "music", "Поставь Кино", "Включаю: Кино — Кукушка.", true)
+	got := messageTexts(e.dialogue().RouteContext(e.Prepare(dialogue.WithSpeaker(t.Context(), "device:speaker"))).Messages)
+	if !slices.Contains(got, "assistant: [music] Включаю: Кино — Кукушка.") {
+		t.Fatalf("route context %q", got)
+	}
+}
+
+func TestIdlePlayerWordsBelongToAnOpenClaudeConversation(t *testing.T) {
+	route := "llm"
+	e, _ := youTubeEngine(t, func(context.Context, string, []llm.Message, []string) (llm.RouteAnswer, error) {
+		return llm.RouteAnswer{Route: route}, nil
+	}, func(context.Context, []llm.Message, bool) (string, error) {
+		return "Первая часть рассказа.", nil
+	})
+	speaker := dialogue.WithSpeaker(t.Context(), "device:speaker")
+	if _, err := e.Resolve(e.Prepare(speaker), "Расскажи длинную историю"); err != nil {
+		t.Fatal(err)
+	}
+	if d := e.Decide(e.Prepare(speaker), "Продолжай"); d.Route == "playback" {
+		t.Fatalf("«продолжай» in a conversation went to the idle player: %+v", d)
 	}
 }

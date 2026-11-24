@@ -12,6 +12,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 type panelCall struct {
@@ -128,7 +129,8 @@ func TestStartSaysThePlayerIsDownWhenThePanelIsUnreachable(t *testing.T) {
 }
 
 func TestActiveFollowsThePlayerState(t *testing.T) {
-	for status, want := range map[string]bool{"playing": true, "paused": true, "buffering": true, "stopped": false, "error": false} {
+	// A paused queue is quiet: pause/stop words go to Yandex and the mic works.
+	for status, want := range map[string]bool{"playing": true, "paused": false, "buffering": true, "stopped": false, "error": false} {
 		c, _, _ := panel(t, func(panelCall) (int, any) { return 200, playing(status, "a", "b") })
 		if got := (&Player{Client: c}).Active(t.Context()); got != want {
 			t.Errorf("status %s: active=%v", status, got)
@@ -176,11 +178,9 @@ func TestWhatIsPlayingNamesTheTrackOrSilence(t *testing.T) {
 }
 
 func TestIdleControlsAnswerWithoutTouchingYandex(t *testing.T) {
+	// The real panel starts an empty queue silently, so the bridge checks first.
 	c, calls, _ := panel(t, func(c panelCall) (int, any) {
-		if c.Action == "resume" {
-			return 422, map[string]any{"error": "плеер не запущен"}
-		}
-		return 200, playing("stopped", "a", "b")
+		return 200, map[string]any{"state": map[string]any{"status": "stopped", "queue": []any{}}}
 	})
 	p := &Player{Client: c, Silence: func(context.Context) error { return nil }}
 	for action, want := range map[string]string{"next": "Сейчас ничего не играет.", "previous": "Сейчас ничего не играет.", "resume": "Нечего продолжать."} {
@@ -197,8 +197,40 @@ func TestIdleControlsAnswerWithoutTouchingYandex(t *testing.T) {
 		}
 	}
 	for _, call := range *calls {
-		if call.Action == "next" || call.Action == "previous" {
+		if call.Action != "state" {
 			t.Fatalf("idle %s reached the player", call.Action)
+		}
+	}
+}
+
+func TestResumeWhileIdleContinuesTheSavedQueue(t *testing.T) {
+	c, calls, _ := panel(t, func(panelCall) (int, any) { return 200, playing("stopped", "Кино", "Кукушка") })
+	p := &Player{Client: c, Silence: func(context.Context) error { return nil }}
+	if answer, _ := p.Control(t.Context(), "resume"); answer != "" {
+		t.Fatalf("answer=%q", answer)
+	}
+	if last := (*calls)[len(*calls)-1]; last.Action != "resume" {
+		t.Fatalf("saved queue was not resumed: %+v", *calls)
+	}
+}
+
+func TestHungPanelDoesNotHoldVoiceRequests(t *testing.T) {
+	block := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { <-block }))
+	t.Cleanup(func() { close(block); srv.Close() })
+	start := time.Now()
+	if (&Player{Client: &Client{BaseURL: srv.URL}}).Active(t.Context()) {
+		t.Fatal("a hung panel counted as playing")
+	}
+	if elapsed := time.Since(start); elapsed > 2*time.Second {
+		t.Fatalf("a hung panel held the request for %v", elapsed)
+	}
+}
+
+func TestMoreFailureSentences(t *testing.T) {
+	for msg, want := range map[string]string{"альбом или плейлист не найден": "Не удалось найти такую музыку на YouTube.", "достигнут край очереди": "Это последний трек в очереди."} {
+		if got := failureText(&PanelError{Status: 422, Message: msg}); got != want {
+			t.Errorf("%q -> %q", msg, got)
 		}
 	}
 }

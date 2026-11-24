@@ -21,9 +21,12 @@ PKG=$1 BIN=$2 TARGET=$3 BRIDGE_IP=$4 PORT=${5:-2222}
 ROOT=${YTM_ALICE_ROOT:-/data/ytm-alice}
 HERE=$(cd "$(dirname "$0")" && pwd)
 
-case "$BRIDGE_IP" in
-*[!0-9.]* | "") echo "BRIDGE_IP must be an IPv4 address" >&2; exit 2 ;;
-esac
+ipv4() { echo "$1" | grep -Eq '^([0-9]{1,3}\.){3}[0-9]{1,3}$'; }
+ipv4 "$BRIDGE_IP" || { echo "BRIDGE_IP must be an IPv4 address" >&2; exit 2; }
+SPEAKER_IP=${TARGET#*@}
+ipv4 "$SPEAKER_IP" || { echo "the speaker must be given as root@IPV4 (the panel listens on that address)" >&2; exit 2; }
+echo "$PORT" | grep -Eq '^[0-9]+$' || { echo "SSH_PORT must be a number" >&2; exit 2; }
+echo "$ROOT" | grep -Eq '^/[A-Za-z0-9/._-]+$' || { echo "bad YTM_ALICE_ROOT" >&2; exit 2; }
 command -v zstd >/dev/null || { echo "zstd is required to unpack $PKG" >&2; exit 2; }
 file "$BIN" | grep -q 'ARM aarch64' || { echo "$BIN is not an arm64 Linux build" >&2; exit 2; }
 
@@ -37,7 +40,7 @@ done
 cp "$BIN" "$WORK/stage/bin/ytm-alice"
 cp -R "$WORK/pkg/files/share/local.ytm-alice" "$WORK/stage/share/"
 chmod 755 "$WORK/stage/bin/"*
-sed -e "s|@ROOT@|$ROOT|" -e "s|@BRIDGE_IP@|$BRIDGE_IP|" "$HERE/boot-hook.sh" >"$WORK/stage/S99zytm-alice"
+sed -e "s|@ROOT@|$ROOT|" -e "s|@BRIDGE_IP@|$BRIDGE_IP|" -e "s|@SPEAKER_IP@|$SPEAKER_IP|" "$HERE/boot-hook.sh" >"$WORK/stage/S99zytm-alice"
 chmod 755 "$WORK/stage/S99zytm-alice"
 sh -n "$WORK/stage/S99zytm-alice"
 if [ -n "$DRY" ]; then
@@ -45,7 +48,7 @@ if [ -n "$DRY" ]; then
 	exit 0
 fi
 
-SSH="ssh -o BatchMode=yes -p $PORT $TARGET"
+SSH="ssh -o BatchMode=yes -p $PORT -- $TARGET"
 tar -C "$WORK/stage" -cf - bin share S99zytm-alice | gzip | $SSH "
 	set -e
 	[ -x /etc/init.d/S99zytm-alice ] && /etc/init.d/S99zytm-alice stop || true
@@ -58,6 +61,7 @@ tar -C "$WORK/stage" -cf - bin share S99zytm-alice | gzip | $SSH "
 	mount -o remount,ro / || true
 	rm -rf $ROOT.new
 	/etc/init.d/S99zytm-alice start
+	iptables -C INPUT -p tcp --dport 24721 -j YTM_ALICE
 	sleep 3
 	YTM_ALICE_DATA=$ROOT/var $ROOT/bin/ytm-alice status
 "

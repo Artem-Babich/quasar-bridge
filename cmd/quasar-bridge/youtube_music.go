@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"log/slog"
+	"net"
 	"net/url"
 
 	"github.com/skrashevich/quasar-bridge/internal/bridge"
@@ -19,6 +20,11 @@ func useYouTubeMusic(engine *bridge.Engine, panelURL string) bool {
 	u, err := url.Parse(panelURL)
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
 		slog.Error("QUASAR_YTMUSIC_URL must be an http(s) panel address; YouTube Music is off")
+		return false
+	}
+	// The panel answers only its own IP address or alice.lan/alice.local.
+	if host := u.Hostname(); net.ParseIP(host) == nil && host != "alice.lan" && host != "alice.local" {
+		slog.Error("QUASAR_YTMUSIC_URL must name the speaker by IP address; YouTube Music is off")
 		return false
 	}
 	player := &ytmusic.Player{

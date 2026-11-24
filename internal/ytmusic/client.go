@@ -46,6 +46,11 @@ func (s State) Playing() bool {
 	return s.Status == "playing" || s.Status == "paused" || s.Status == "buffering"
 }
 
+// Sounding reports music the speaker is playing now; a paused queue is quiet.
+func (s State) Sounding() bool {
+	return s.Status == "playing" || s.Status == "buffering"
+}
+
 // PanelError is a command the player refused (HTTP 4xx with a message).
 type PanelError struct {
 	Status  int
@@ -65,7 +70,7 @@ func (c *Client) client() *http.Client {
 	if c.HTTP != nil {
 		return c.HTTP
 	}
-	return &http.Client{Timeout: 50 * time.Second}
+	return &http.Client{Timeout: 50 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 }
 
 func (c *Client) origin() string {

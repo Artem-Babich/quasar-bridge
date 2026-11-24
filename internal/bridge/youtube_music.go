@@ -76,8 +76,10 @@ func (e *Engine) playerCommand(text string) string {
 	return ""
 }
 
-// playerRoute reports a player word YouTube handles now.
-func (e *Engine) playerRoute(ctx context.Context, text string) bool {
+// playerRoute reports a player word YouTube handles now. While nothing
+// sounds and a Claude conversation is open, «продолжай», «дальше» belong to
+// the conversation.
+func (e *Engine) playerRoute(ctx context.Context, text string, conversation bool) bool {
 	if e.Playback == nil {
 		return false
 	}
@@ -89,7 +91,16 @@ func (e *Engine) playerRoute(ctx context.Context, text string) bool {
 		return true
 	}
 	idle, ok := e.Playback.(idlePlayer)
-	return e.MusicRoute && ok && idle.HandlesIdle(action)
+	return e.MusicRoute && ok && !conversation && idle.HandlesIdle(action)
+}
+
+// routeTagFor tags YouTube replies [music] for the classifiers, matching the
+// prompt's music route; everything else keeps routeTag.
+func (e *Engine) routeTagFor(route string) string {
+	if e.MusicRoute && (route == "music" || route == "playback" || route == "music_unclear") {
+		return "music"
+	}
+	return routeTag(route)
 }
 
 // keepsDialogue: a YouTube command does not end the Claude conversation.
