@@ -32,6 +32,9 @@ func useYouTubeMusic(engine *bridge.Engine, panelURL string) bool {
 		// A silent reply: audio_stop without speech. ytm-alice plays through
 		// its own player, so the stop reaches only Yandex's player.
 		Silence: func(ctx context.Context) error { return sound.Play(ctx, sound.Request{Command: "stop"}) },
+		// The classifier's model names the artist and the song in the
+		// nominative before the search: ytm-alice matches words exactly.
+		Model: engine.LLM,
 	}
 	engine.Music, engine.Playback, engine.MusicRoute = player, player, true
 	slog.Info("youtube_music", "panel", u.Host)
