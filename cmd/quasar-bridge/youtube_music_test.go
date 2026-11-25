@@ -6,9 +6,11 @@ package main
 // only its own IP address, so a host name is refused as well.
 
 import (
+	"context"
 	"testing"
 
 	"github.com/skrashevich/quasar-bridge/internal/bridge"
+	"github.com/skrashevich/quasar-bridge/internal/llm"
 	"github.com/skrashevich/quasar-bridge/internal/ytmusic"
 )
 
@@ -33,3 +35,18 @@ func TestWithoutPanelURLMusicStaysAsBefore(t *testing.T) {
 		}
 	}
 }
+
+// The route classifier's model (Haiku) also names the artist and the song
+// before the YouTube search (owner decision 2026-11-25).
+func TestYouTubeSearchUsesTheClassifierModelForNames(t *testing.T) {
+	model := stubCompleter{}
+	e := &bridge.Engine{LLM: model}
+	useYouTubeMusic(e, "http://192.0.2.20:24721")
+	if p, ok := e.Music.(*ytmusic.Player); !ok || p.Model != model {
+		t.Fatalf("player model %#v", e.Music)
+	}
+}
+
+type stubCompleter struct{}
+
+func (stubCompleter) Complete(context.Context, []llm.Message, bool) (string, error) { return "", nil }

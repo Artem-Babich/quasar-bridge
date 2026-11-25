@@ -83,10 +83,23 @@ func (c *Client) origin() string {
 
 // Command sends one panel command and returns the player state after it.
 func (c *Client) Command(ctx context.Context, action, query string) (State, error) {
-	body, err := json.Marshal(struct {
-		Action string `json:"action"`
-		Query  string `json:"query,omitempty"`
-	}{action, query})
+	return c.Send(ctx, Command{Action: action, Query: query})
+}
+
+// Command is a panel command. For play, Artist alone queues only that
+// artist's songs, Title finds a catalog song by its title when Query finds
+// nothing, and Spoken is searched last (the fork of ytm-alice).
+type Command struct {
+	Action string `json:"action"`
+	Query  string `json:"query,omitempty"`
+	Artist string `json:"artist,omitempty"`
+	Title  string `json:"title,omitempty"`
+	Spoken string `json:"spoken,omitempty"`
+}
+
+// Send posts a panel command and returns the new state.
+func (c *Client) Send(ctx context.Context, command Command) (State, error) {
+	body, err := json.Marshal(command)
 	if err != nil {
 		return State{}, err
 	}

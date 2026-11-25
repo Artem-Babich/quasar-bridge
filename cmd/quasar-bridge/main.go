@@ -396,6 +396,7 @@ func main() {
 			n := bridge.NewNative(ctx, up, down, engine)
 			n.GateText = false
 			n.ShouldListen = cfg.ListenAfterReply
+			n.LogPhrases = os.Getenv("QUASAR_LOG_PHRASES") == "1"
 			if cfg.LocalProgress.Enabled {
 				n.ProgressAfter = time.Duration(cfg.LocalProgress.AfterMS) * time.Millisecond
 				n.ProgressInterval = time.Duration(cfg.LocalProgress.IntervalMS) * time.Millisecond

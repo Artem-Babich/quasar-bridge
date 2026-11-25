@@ -6,6 +6,8 @@ import (
 	"log/slog"
 	"strings"
 	"time"
+
+	"github.com/skrashevich/quasar-bridge/internal/llm"
 )
 
 // Approved sentences (owner decision 2026-11-07).
@@ -27,6 +29,16 @@ type Player struct {
 	// Silence makes the current speaker reply silent (an audio_stop reply
 	// without speech). Without it, or when it fails, the reply is «Хорошо.».
 	Silence func(context.Context) error
+	// Model names the artist and the song before the search (names.go).
+	// Without it the spoken words are searched as they are.
+	Model Completer
+	// NamesTimeout bounds the model; zero means namesTimeout.
+	NamesTimeout time.Duration
+}
+
+// Completer is the language model that names the artist and the song.
+type Completer interface {
+	Complete(context.Context, []llm.Message, bool) (string, error)
 }
 
 // CanStartMusic is false: the route classifier chooses the music route.
@@ -36,8 +48,18 @@ func (p *Player) CanStartMusic(string) bool { return false }
 // failures become approved sentences, not errors.
 func (p *Player) StartMusic(ctx context.Context, text string) (string, error) {
 	req := Parse(text)
-	slog.Info("ytmusic_start", "action", req.Action, "query", req.Query)
-	state, err := p.Client.Command(ctx, req.Action, req.Query)
+	command := Command{Action: req.Action, Query: req.Query}
+	if namesHelp(req) {
+		if n, ok := p.names(ctx, text); ok {
+			command.Artist, command.Title = n.Artist, n.Title
+			command.Query = strings.TrimSpace(n.Artist + " " + n.Title)
+			if !strings.EqualFold(req.Query, command.Query) {
+				command.Spoken = req.Query
+			}
+		}
+	}
+	slog.Info("ytmusic_start", "action", command.Action, "query", command.Query, "artist", command.Artist, "title", command.Title)
+	state, err := p.Client.Send(ctx, command)
 	if err != nil {
 		if ctx.Err() != nil {
 			return "", ctx.Err()
