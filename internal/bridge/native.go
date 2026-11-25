@@ -110,6 +110,16 @@ type Native struct {
 	DecisionDelay    time.Duration
 	ProgressAfter    time.Duration
 	ProgressInterval time.Duration
+	// LogPhrases logs each recognized phrase (fork; QUASAR_LOG_PHRASES=1).
+	LogPhrases bool
+}
+
+// logPhrase logs the recognized phrase when phrase logging is on, so a wrong
+// route can be explained by the words the speaker heard.
+func (n *Native) logPhrase(request, text string) {
+	if n.LogPhrases {
+		slog.Info("native_phrase", "request", request, "text", text)
+	}
 }
 
 func NewNative(ctx context.Context, up, down Sender, resolver Resolver) *Native {
@@ -616,6 +626,7 @@ func (n *Native) maybeResolve(p *nativeRequest) {
 		var err error
 		if n.resolver != nil && strings.TrimSpace(text) != "" {
 			if routed, ok := n.resolver.(RoutedResolver); ok {
+				n.logPhrase(requestTag(p.id), text)
 				decision := routed.Decide(p.ctx, text)
 				n.mu.Lock()
 				p.listenOnStreamStart = decision.Route == "llm"
