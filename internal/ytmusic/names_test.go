@@ -159,3 +159,22 @@ func TestNamesPromptAsksForCatalogSpellingAndJSON(t *testing.T) {
 		t.Fatalf("json=%v prompt=%q", wantJSON, system)
 	}
 }
+
+// ytm-alice plays a whole album or playlist for a query starting with
+// «альбом» or «плейлист»; the model must not rewrite such a query.
+func TestAlbumAndPlaylistQueriesKeepTheirPrefix(t *testing.T) {
+	for phrase, query := range map[string]string{
+		"Включи альбом Кино Звезда по имени Солнце": "альбом Кино Звезда по имени Солнце",
+		"Включи плейлист Для бега":                  "плейлист Для бега",
+	} {
+		c, calls := playPanel(t)
+		var asked []string
+		p := &Player{Client: c, Model: answering(`{"artist":"Кино","title":"Звезда по имени Солнце"}`, &asked)}
+		if _, err := p.StartMusic(t.Context(), phrase); err != nil {
+			t.Fatal(err)
+		}
+		if len(asked) != 0 || (*calls)[0].Query != query {
+			t.Fatalf("%q: asked=%q call=%+v", phrase, asked, (*calls)[0])
+		}
+	}
+}

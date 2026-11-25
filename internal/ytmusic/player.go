@@ -49,7 +49,7 @@ func (p *Player) CanStartMusic(string) bool { return false }
 func (p *Player) StartMusic(ctx context.Context, text string) (string, error) {
 	req := Parse(text)
 	command := Command{Action: req.Action, Query: req.Query}
-	if req.Action == "play" && req.Query != "мои лайки" {
+	if namesHelp(req) {
 		if n, ok := p.names(ctx, text); ok {
 			command.Artist, command.Title = n.Artist, n.Title
 			command.Query = strings.TrimSpace(n.Artist + " " + n.Title)

@@ -24,6 +24,14 @@ type Names struct {
 	Title  string `json:"title"`
 }
 
+// namesHelp is false for requests ytm-alice understands by their own words:
+// likes, recommendations, and a whole album or playlist.
+func namesHelp(req Request) bool {
+	lower := strings.ToLower(req.Query)
+	return req.Action == "play" && req.Query != "мои лайки" &&
+		!strings.HasPrefix(lower, "альбом ") && !strings.HasPrefix(lower, "плейлист ")
+}
+
 // names asks the model for the artist and the song. ok is false when the
 // model is missing, slow, fails or names nothing.
 func (p *Player) names(ctx context.Context, text string) (Names, bool) {
