@@ -15,7 +15,7 @@ import (
 const namesTimeout = 3500 * time.Millisecond
 
 const namesPrompt = `Пользователь просит включить музыку. Назови исполнителя и песню из его фразы так, как они записаны в музыкальном каталоге: в именительном падеже и в оригинальном написании (иностранные исполнители — латиницей).
-Слова «группа», «песня», «трек», «альбом», «исполнитель» в названия не входят.
+Слова «группа», «песня», «трек», «альбом», «исполнитель» — команды, а не названия, кроме случаев, когда они часть названия («Группа крови»).
 Не додумывай: если исполнитель или песня не названы, оставь пустую строку.
 Ответь только JSON: {"artist":"...","title":"..."}`
 
@@ -50,8 +50,13 @@ func (p *Player) names(ctx context.Context, text string) (Names, bool) {
 		return Names{}, false
 	}
 	// Haiku sometimes wraps the JSON in a ```json fence.
-	answer = strings.TrimSpace(answer)
-	answer = strings.TrimPrefix(strings.TrimSuffix(answer, "```"), "```json")
+	answer = strings.TrimSuffix(strings.TrimSpace(answer), "```")
+	if strings.HasPrefix(answer, "```") {
+		answer = answer[3:]
+		if len(answer) >= 4 && strings.EqualFold(answer[:4], "json") {
+			answer = answer[4:]
+		}
+	}
 	var n Names
 	if json.Unmarshal([]byte(strings.TrimSpace(answer)), &n) != nil {
 		return Names{}, false

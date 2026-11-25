@@ -199,3 +199,38 @@ func TestDefaultNamesWaitCoversASlowName(t *testing.T) {
 		t.Fatalf("names timeout %v", namesTimeout)
 	}
 }
+
+// Other fence forms Haiku may use.
+func TestOtherFenceFormsAreAccepted(t *testing.T) {
+	for _, answer := range []string{"```\n{\"artist\":\"Земфира\",\"title\":\"\"}\n```", "```JSON\n{\"artist\":\"Земфира\",\"title\":\"\"}\n```"} {
+		c, calls := playPanel(t)
+		var asked []string
+		p := &Player{Client: c, Model: answering(answer, &asked)}
+		if _, err := p.StartMusic(t.Context(), "Включи Земфиру"); err != nil {
+			t.Fatal(err)
+		}
+		if got := (*calls)[0]; got.Artist != "Земфира" {
+			t.Fatalf("%q: call %+v", answer, got)
+		}
+	}
+}
+
+// A lowercase transcript equal to the model's name is not a second search.
+func TestSpokenFallbackIgnoresLetterCase(t *testing.T) {
+	c, calls := playPanel(t)
+	var asked []string
+	p := &Player{Client: c, Model: answering(`{"artist":"Сплин","title":""}`, &asked)}
+	if _, err := p.StartMusic(t.Context(), "включи сплин"); err != nil {
+		t.Fatal(err)
+	}
+	if got := (*calls)[0]; got.Spoken != "" {
+		t.Fatalf("call %+v", got)
+	}
+}
+
+// «Группа крови» is a title: the command words count when they belong to it.
+func TestPromptKeepsCommandWordsThatBelongToTheTitle(t *testing.T) {
+	if !strings.Contains(namesPrompt, "Группа крови") {
+		t.Fatalf("prompt %q", namesPrompt)
+	}
+}

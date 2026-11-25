@@ -53,7 +53,7 @@ func (p *Player) StartMusic(ctx context.Context, text string) (string, error) {
 		if n, ok := p.names(ctx, text); ok {
 			command.Artist, command.Title = n.Artist, n.Title
 			command.Query = strings.TrimSpace(n.Artist + " " + n.Title)
-			if req.Query != command.Query {
+			if !strings.EqualFold(req.Query, command.Query) {
 				command.Spoken = req.Query
 			}
 		}
