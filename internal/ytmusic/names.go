@@ -10,8 +10,9 @@ import (
 )
 
 // namesTimeout bounds the model call: music must not wait long for a better
-// search; after it the spoken words are searched as before.
-const namesTimeout = 2500 * time.Millisecond
+// search; after it the spoken words are searched as before. A name like
+// «Операция Пластилин» took Haiku 2.4–3 s on Pi 3.
+const namesTimeout = 3500 * time.Millisecond
 
 const namesPrompt = `Пользователь просит включить музыку. Назови исполнителя и песню из его фразы так, как они записаны в музыкальном каталоге: в именительном падеже и в оригинальном написании (иностранные исполнители — латиницей).
 Слова «группа», «песня», «трек», «альбом», «исполнитель» в названия не входят.
@@ -48,8 +49,11 @@ func (p *Player) names(ctx context.Context, text string) (Names, bool) {
 	if err != nil {
 		return Names{}, false
 	}
+	// Haiku sometimes wraps the JSON in a ```json fence.
+	answer = strings.TrimSpace(answer)
+	answer = strings.TrimPrefix(strings.TrimSuffix(answer, "```"), "```json")
 	var n Names
-	if json.Unmarshal([]byte(answer), &n) != nil {
+	if json.Unmarshal([]byte(strings.TrimSpace(answer)), &n) != nil {
 		return Names{}, false
 	}
 	n.Artist, n.Title = strings.TrimSpace(n.Artist), strings.TrimSpace(n.Title)

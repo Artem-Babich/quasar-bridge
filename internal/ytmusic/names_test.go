@@ -178,3 +178,24 @@ func TestAlbumAndPlaylistQueriesKeepTheirPrefix(t *testing.T) {
 		}
 	}
 }
+
+// Haiku sometimes wraps the JSON in a ```json fence (seen on Pi 3).
+func TestFencedModelAnswerIsAccepted(t *testing.T) {
+	c, calls := playPanel(t)
+	var asked []string
+	p := &Player{Client: c, Model: answering("```json\n{\"artist\":\"Земфира\",\"title\":\"\"}\n```", &asked)}
+	if _, err := p.StartMusic(t.Context(), "Включи Земфиру"); err != nil {
+		t.Fatal(err)
+	}
+	if got := (*calls)[0]; got.Query != "Земфира" || got.Artist != "Земфира" {
+		t.Fatalf("call %+v", got)
+	}
+}
+
+// A name like «Операция Пластилин» took Haiku 2.4–3 s on Pi 3; the default
+// wait must cover it.
+func TestDefaultNamesWaitCoversASlowName(t *testing.T) {
+	if namesTimeout < 3500*time.Millisecond {
+		t.Fatalf("names timeout %v", namesTimeout)
+	}
+}
